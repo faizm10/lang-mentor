@@ -1,17 +1,6 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-
-interface NavigationProps {
-  currentView: "mentor" | "admin";
-  onViewChange: (view: "mentor" | "admin") => void;
-}
-
-export default function Navigation({
-  currentView,
-  onViewChange,
-}: NavigationProps) {
+export default function Navigation() {
   return (
     <nav className="flex-1 flex items-center justify-between">
       <div className="flex items-center">
@@ -20,7 +9,7 @@ export default function Navigation({
         </h1>
       </div>
 
-      <div className="flex items-center gap-1 sm:gap-2">
+      {/* <div className="flex items-center gap-1 sm:gap-2">
         <Button
           variant={currentView === "mentor" ? "default" : "outline"}
           size="sm"
@@ -47,7 +36,7 @@ export default function Navigation({
         >
           Admin Dashboard
         </Button>
-      </div>
+      </div> */}
     </nav>
   );
 }
