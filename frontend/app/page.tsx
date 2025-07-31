@@ -2,11 +2,8 @@
 
 import { useState } from "react";
 import MentorSelection from "@/components/mentor-selection";
-import AdminDashboard from "@/components/admin-dashboard";
 import Navigation from "@/components/navigation";
 import { Toaster } from "sonner";
-import { SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
-import { Separator } from "@/components/ui/separator";
 
 export default function Home() {
   const [currentView, setCurrentView] = useState<"mentor" | "admin">("mentor");

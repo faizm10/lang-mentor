@@ -1,8 +1,5 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { AppSidebar } from "@/components/app-sidebar";
-import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-
 export const metadata: Metadata = {
   title: "MatchMentor - LANG",
   description: "Mentor - Mentee Matching Platform",

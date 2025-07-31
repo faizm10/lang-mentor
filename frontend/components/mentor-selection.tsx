@@ -180,7 +180,7 @@ export default function MentorSelection() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8 mb-12">
             {displayedStudents.length > 0 ? (
-              displayedStudents.map((student: any) => {
+              displayedStudents.map((student) => {
                 const isSelected = selectedStudents.includes(student.id)
                 const isDisabled = !isSelected && selectedStudents.length >= 3
                 return (
@@ -253,7 +253,7 @@ export default function MentorSelection() {
                       {selectedStudents.length} of 3 students selected
                     </h3>
                     <p className="text-sm text-gray-600 mt-1 line-clamp-1">
-                      {selectedStudents.map((id) => langStudentsData.find((s: any) => s.id === id)?.name).join(", ")}
+                      {selectedStudents.map((id) => langStudentsData.find((s) => s.id === id)?.name).join(", ")}
                     </p>
                   </div>
                   <div className="flex items-center space-x-3">
