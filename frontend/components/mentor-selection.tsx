@@ -20,7 +20,7 @@ import { fetchMentorProfiles } from "@/lib/supabase/client"; // Import from Supa
 // Define a type for the transformed mentor data
 interface MentorData {
   id: string;
-  name: string;
+  full_name: string;
   year: string;
   major: string;
   minor?: string;
@@ -47,23 +47,31 @@ export default function MentorSelection() {
       setError(null);
       const profiles = await fetchMentorProfiles();
       if (profiles) {
-        const transformedMentors: MentorData[] = profiles.map((profile) => ({
-          id: profile.email,
-          name: profile.full_name,
-          year: profile.year_of_study || "N/A",
-          major: profile.program_of_study || "Undeclared",
-          minor: undefined,
-          avatar: profile.full_name
-            ? profile.full_name
-                .split(" ")
-                .map((n: string) => n[0])
-                .join("")
-                .substring(0, 2)
-                .toUpperCase()
-            : "?",
-          hobbies: [],
-          bio: profile.mentor_description || "No description provided.",
-        }));
+        const transformedMentors: MentorData[] = profiles.map((profile, index) => {
+          // Use email as unique ID since it's NOT NULL in the schema
+          const uniqueId = profile.email;
+          // Use full_name since it's NOT NULL in the schema
+          const fullName = profile.full_name;
+          
+          return {
+            id: uniqueId,
+            full_name: fullName,
+            year: profile.year_of_study || "N/A",
+            major: profile.program_of_study || "Undeclared",
+            minor: undefined,
+            avatar: fullName
+              ? fullName
+                  .split(" ")
+                  .map((n: string) => n[0])
+                  .join("")
+                  .substring(0, 2)
+                  .toUpperCase()
+              : `S${index + 1}`,
+            hobbies: [],
+            bio: profile.mentor_description || "No description provided.",
+          };
+        });
+        console.log("Transformed mentors:", transformedMentors);
         setMentors(transformedMentors);
       } else {
         setError("Failed to load mentor profiles.");
@@ -115,7 +123,7 @@ export default function MentorSelection() {
     const query = searchQuery.toLowerCase();
 
     const filtered = mentors.filter((student) => {
-      const name = (student.name || "").toLowerCase();
+      const name = (student.full_name || "").toLowerCase();
       const major = (student.major || "").toLowerCase();
       const bio = (student.bio || "").toLowerCase();
       const hobbiesMatch =
@@ -141,7 +149,7 @@ export default function MentorSelection() {
     filtered.sort((a, b) => {
       let compareValue = 0;
       if (sortBy === "name") {
-        compareValue = (a.name || "").localeCompare(b.name || "");
+        compareValue = (a.full_name || "").localeCompare(b.full_name || "");
       } else if (sortBy === "year") {
         const yearOrder: { [key: string]: number } = {
           Senior: 3,
@@ -278,14 +286,15 @@ export default function MentorSelection() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8 mb-12">
-            {displayedStudents.length > 0 ? (
-              displayedStudents.map((student) => {
-                const isSelected = selectedStudents.includes(student.id);
-                const isDisabled = !isSelected && selectedStudents.length >= 3;
-                return (
-                  <Card
-                    key={student.id}
+                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8 mb-12">
+             {displayedStudents.length > 0 ? (
+                              displayedStudents.map((student, index) => {
+                 const isSelected = selectedStudents.includes(student.id);
+                 const isDisabled = !isSelected && selectedStudents.length >= 3;
+ 
+                 return (
+                   <Card
+                     key={`${student.id}-${index}`}
                     className={cn(
                       "relative transition-all duration-200 cursor-pointer h-full flex flex-col",
                       "hover:shadow-lg",
@@ -305,7 +314,7 @@ export default function MentorSelection() {
                         </div>
                         <div>
                           <h3 className="text-xl font-bold text-gray-900">
-                            {student.name}
+                            {student.full_name}
                           </h3>
                           <p className="text-sm text-gray-500 mt-0.5">
                             {student.year} – {student.major}
@@ -317,14 +326,15 @@ export default function MentorSelection() {
                         checked={isSelected}
                         disabled={isDisabled}
                         className="border-2 w-5 h-5"
+                        onClick={(e) => e.stopPropagation()}
                       />
                     </CardHeader>
                     <CardContent className="pt-2 pb-4 flex-1">
                       <div className="flex flex-wrap gap-2 mb-4">
                         {Array.isArray(student.hobbies) &&
-                          student.hobbies.map((hobby: string) => (
+                          student.hobbies.map((hobby: string, idx: number) => (
                             <Badge
-                              key={hobby}
+                              key={`${student.id}-${hobby}-${idx}`}
                               variant="secondary"
                               className="text-xs px-2.5 py-1 bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-full"
                             >
@@ -366,7 +376,7 @@ export default function MentorSelection() {
                     </h3>
                     <p className="text-sm text-gray-600 mt-1 line-clamp-1">
                       {selectedStudents
-                        .map((id) => mentors.find((s) => s.id === id)?.name)
+                        .map((id) => mentors.find((s) => s.id === id)?.full_name)
                         .join(", ")}
                     </p>
                   </div>
