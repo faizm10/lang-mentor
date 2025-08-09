@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils";
 
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,66 +14,112 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { menteesData } from "@/lib/mentee";
-import { langStudentsData } from "@/lib/mentor"; // Your existing mentor data
-import { runMatching, type MatchedPair } from "@/lib/matching-system";
+import {
+  fetchMenteePreferences,
+  fetchMentorProfiles,
+  type MenteePreferencesRow,
+  type MentorProfileRow,
+} from "@/lib/supabase/client";
 
 export default function Dashboard() {
-  const [matchingResults, setMatchingResults] = useState<MatchedPair[]>([]);
+  const [prefs, setPrefs] = useState<MenteePreferencesRow[]>([]);
+  const [mentors, setMentors] = useState<MentorProfileRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [matchingRun, setMatchingRun] = useState(false);
+  const [matchingResults, setMatchingResults] = useState<
+    { menteeId: string; mentorId: string | null }[]
+  >([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        setLoading(true);
+        setError(null);
+        const [p, m] = await Promise.all([
+          fetchMenteePreferences(),
+          fetchMentorProfiles(),
+        ]);
+        if (!cancelled) {
+          setPrefs(p ?? []);
+          setMentors(m ?? []);
+        }
+      } catch (e) {
+        console.error(e);
+        if (!cancelled) setError("Failed to load submissions.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const mentorNameMap = useMemo(() => {
+    return new Map(mentors.map((m) => [m.id, m.full_name] as const));
+  }, [mentors]);
+
+  const baseData = useMemo(() => {
+    return prefs.map((row) => ({
+      id: row.id,
+      name: row.full_name,
+      topChoices: [row.first_choice, row.second_choice, row.third_choice].filter(
+        Boolean,
+      ) as string[],
+    }));
+  }, [prefs]);
 
   const handleRunMatching = () => {
-    const results = runMatching(menteesData);
+    const mentorIds = new Set(mentors.map((m) => m.id));
+    const assigned = new Set<string>();
+    const results: { menteeId: string; mentorId: string | null }[] = [];
+    for (const mentee of baseData) {
+      let matched: string | null = null;
+      for (const choiceId of mentee.topChoices) {
+        if (mentorIds.has(choiceId) && !assigned.has(choiceId)) {
+          matched = choiceId;
+          assigned.add(choiceId);
+          break;
+        }
+      }
+      results.push({ menteeId: mentee.id, mentorId: matched });
+    }
     setMatchingResults(results);
     setMatchingRun(true);
   };
 
-  // Create a map for quick lookup of mentor names by ID
-  const mentorNameMap = useMemo(() => {
-    return new Map(langStudentsData.map((mentor) => [mentor.id, mentor.name]));
-  }, []);
-
-  // Combine mentee data with matching results for display
   const displayData = useMemo(() => {
-    return menteesData.map((mentee) => {
-      const match = matchingResults.find((res) => res.menteeId === mentee.id);
-      const matchedMentorName = match?.mentorId
-        ? mentorNameMap.get(match.mentorId)
+    return baseData.map((mentee) => {
+      const match = matchingResults.find((r) => r.menteeId === mentee.id);
+      const matchedMentorId = match?.mentorId ?? null;
+      const matchedMentorName = matchedMentorId
+        ? mentorNameMap.get(matchedMentorId) || null
         : null;
       const status = matchedMentorName ? "Matched" : "Unmatched";
-
-      return {
-        ...mentee,
-        matchedMentorName,
-        status,
-      };
+      return { ...mentee, matchedMentorName, status } as const;
     });
-  }, [menteesData, matchingResults, mentorNameMap]);
+  }, [baseData, matchingResults, mentorNameMap]);
 
-  // Calculate unmatched mentees
   const unmatchedMentees = useMemo(() => {
-    return displayData.filter((mentee) => mentee.status === "Unmatched");
+    return displayData.filter((r) => r.status === "Unmatched");
   }, [displayData]);
 
-  // Calculate unassigned mentors (not assigned in the current matching run)
   const unassignedMentors = useMemo(() => {
-    if (!matchingRun) return [];
-    const assignedMentorIds = new Set(
-      matchingResults.map((match) => match.mentorId).filter(Boolean) as string[]
+    if (!matchingRun) return [] as MentorProfileRow[];
+    const assignedIds = new Set(
+      matchingResults.map((r) => r.mentorId).filter(Boolean) as string[],
     );
-    return langStudentsData.filter(
-      (mentor) => !assignedMentorIds.has(mentor.id)
-    );
-  }, [matchingResults, langStudentsData, matchingRun]);
+    return mentors.filter((m) => !assignedIds.has(m.id));
+  }, [matchingResults, mentors, matchingRun]);
 
-  // Calculate unchosen mentors (not in any mentee's top 3 choices)
   const unchosenMentors = useMemo(() => {
-    const chosenMentorIds = new Set<string>();
-    menteesData.forEach((mentee) => {
-      mentee.topChoices.forEach((choiceId) => chosenMentorIds.add(choiceId));
-    });
-    return langStudentsData.filter((mentor) => !chosenMentorIds.has(mentor.id));
-  }, [langStudentsData, menteesData]);
+    const chosen = new Set<string>();
+    baseData.forEach((m) => m.topChoices.forEach((c) => chosen.add(c)));
+    return mentors.filter((m) => !chosen.has(m.id));
+  }, [baseData, mentors]);
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-50 p-4 md:p-6 lg:p-8">
@@ -83,15 +129,19 @@ export default function Dashboard() {
             <CardTitle className="text-2xl font-bold text-gray-900">
               Mentee Matching Dashboard
             </CardTitle>
-            <p className="text-gray-600">
-              View mentee choices and run the matching system.
-            </p>
+            <p className="text-gray-600">View mentee choices from Supabase.</p>
           </CardHeader>
           <CardContent>
+            {loading && (
+              <p className="text-gray-500 text-sm mb-4">Loading submissions…</p>
+            )}
+            {error && (
+              <p className="text-red-600 text-sm mb-4">{error}</p>
+            )}
             <div className="mb-6">
               <Button
                 onClick={handleRunMatching}
-                disabled={matchingRun}
+                disabled={matchingRun || loading || !!error || baseData.length === 0}
                 className="bg-blue-600 hover:bg-blue-700 text-white"
               >
                 {matchingRun ? "Matching Run" : "Run Matching System"}
@@ -143,7 +193,7 @@ export default function Dashboard() {
                         className={cn(
                           mentee.status === "Matched"
                             ? "bg-emerald-100 text-emerald-700"
-                            : "bg-red-100 text-red-700"
+                            : "bg-red-100 text-red-700",
                         )}
                       >
                         {mentee.status}
@@ -153,7 +203,6 @@ export default function Dashboard() {
                 ))}
               </TableBody>
             </Table>
-
             {matchingRun && (
               <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
                 <Card className="shadow-sm">
@@ -170,9 +219,7 @@ export default function Dashboard() {
                         ))}
                       </ul>
                     ) : (
-                      <p className="text-gray-500">
-                        All mentees have been matched!
-                      </p>
+                      <p className="text-gray-500">All mentees have been matched!</p>
                     )}
                   </CardContent>
                 </Card>
@@ -187,13 +234,11 @@ export default function Dashboard() {
                     {unassignedMentors.length > 0 ? (
                       <ul className="list-disc pl-5 space-y-1 text-gray-700">
                         {unassignedMentors.map((mentor) => (
-                          <li key={mentor.id}>{mentor.name}</li>
+                          <li key={mentor.id}>{mentor.full_name}</li>
                         ))}
                       </ul>
                     ) : (
-                      <p className="text-gray-500">
-                        All mentors have been assigned!
-                      </p>
+                      <p className="text-gray-500">All mentors have been assigned!</p>
                     )}
                   </CardContent>
                 </Card>
@@ -208,7 +253,7 @@ export default function Dashboard() {
                     {unchosenMentors.length > 0 ? (
                       <ul className="list-disc pl-5 space-y-1 text-gray-700">
                         {unchosenMentors.map((mentor) => (
-                          <li key={mentor.id}>{mentor.name}</li>
+                          <li key={mentor.id}>{mentor.full_name}</li>
                         ))}
                       </ul>
                     ) : (

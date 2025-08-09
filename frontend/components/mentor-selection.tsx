@@ -6,6 +6,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -24,7 +33,10 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { fetchMentorProfiles } from "@/lib/supabase/client";
+import {
+  fetchMentorProfiles,
+  submitMenteePreferences,
+} from "@/lib/supabase/client";
 
 // Transformed mentor data for the UI
 interface MentorData {
@@ -49,6 +61,12 @@ export default function MentorSelection() {
   const [mentors, setMentors] = useState<MentorData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [fullName, setFullName] = useState("");
+  const [studentId, setStudentId] = useState("");
+  const [email, setEmail] = useState("");
+  const [preferences, setPreferences] = useState<string[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     async function loadMentors() {
@@ -117,12 +135,73 @@ export default function MentorSelection() {
 
   const handleSubmit = () => {
     if (selectedIds.length === 3) {
-      setIsSubmitted(true);
-      // TODO: Wire this up to a Server Action or Supabase insert into mentee_preferences
-      // (You can progressively adopt server features later if you want) [^2]
-      console.log("Submitting selections:", selectedIds);
+      setIsFormOpen(true);
     } else {
       toast("Please select exactly 3 students to continue");
+    }
+  };
+
+  // Keep preferences in sync with current selection when it reaches 3
+  useEffect(() => {
+    if (selectedIds.length === 3) {
+      setPreferences(selectedIds);
+    } else if (preferences.length !== 0) {
+      setPreferences([]);
+    }
+  }, [selectedIds]);
+
+  const movePreferenceUp = (index: number) => {
+    if (index <= 0) return;
+    setPreferences((prev) => {
+      const next = [...prev];
+      [next[index - 1], next[index]] = [next[index], next[index - 1]];
+      return next;
+    });
+  };
+
+  const movePreferenceDown = (index: number) => {
+    if (index >= preferences.length - 1) return;
+    setPreferences((prev) => {
+      const next = [...prev];
+      [next[index + 1], next[index]] = [next[index], next[index + 1]];
+      return next;
+    });
+  };
+
+  const handleFinalSubmit = async () => {
+    if (!fullName.trim() || !studentId.trim() || !email.trim()) {
+      toast("Please fill out your Full Name, Student ID, and Email.");
+      return;
+    }
+    const numericStudentId = Number(studentId.trim());
+    if (!Number.isFinite(numericStudentId)) {
+      toast("Student ID must be a number.");
+      return;
+    }
+    if (preferences.length !== 3) {
+      toast("Please confirm your top 3 order.");
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const [first, second, third] = preferences;
+      const { error } = await submitMenteePreferences({
+        full_name: fullName.trim(),
+        student_id: numericStudentId,
+        email: email.trim(),
+        first_choice: first,
+        second_choice: second,
+        third_choice: third,
+      });
+      if (error) {
+        console.error(error);
+        toast("Submission failed. Please try again.");
+        return;
+      }
+      setIsFormOpen(false);
+      setIsSubmitted(true);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -204,10 +283,10 @@ export default function MentorSelection() {
             <p className="text-gray-600 mb-4 leading-relaxed">
               Your student selections have been submitted successfully.
             </p>
-            <p className="text-sm text-gray-500">
+            {/* <p className="text-sm text-gray-500">
               You’ll receive a confirmation email within 24 hours to connect
               with your peers.
-            </p>
+            </p> */}
           </CardContent>
         </Card>
       </div>
@@ -493,6 +572,111 @@ export default function MentorSelection() {
           </div>
         </div>
       )}
+
+      {/* Preferences + Info Form */}
+      <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Confirm your details</DialogTitle>
+            <DialogDescription>
+              Provide your info and order your top 3 selections.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="fullName">Full Name</Label>
+                <Input
+                  id="fullName"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="e.g., Jane Doe"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="studentId">Student ID</Label>
+                <Input
+                  id="studentId"
+                  value={studentId}
+                  onChange={(e) => setStudentId(e.target.value)}
+                  placeholder="e.g., 1234567"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="email">Email Address</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="e.g., jane.doe@uoguelph.ca"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Top 3 order</Label>
+              <div className="space-y-2">
+                {preferences.map((id, index) => {
+                  const mentorName =
+                    mentors.find((m) => m.id === id)?.full_name || "Unknown";
+                  return (
+                    <div
+                      key={id}
+                      className="flex items-center justify-between rounded-md border p-2"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm font-medium w-6 text-gray-600">
+                          {index + 1}.
+                        </span>
+                        <span className="text-sm text-gray-900">
+                          {mentorName}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          onClick={() => movePreferenceUp(index)}
+                          disabled={index === 0}
+                          aria-label="Move up"
+                        >
+                          <ArrowUp className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          onClick={() => movePreferenceDown(index)}
+                          disabled={index === preferences.length - 1}
+                          aria-label="Move down"
+                        >
+                          <ArrowDown className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setIsFormOpen(false)} disabled={isSaving}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleFinalSubmit}
+              disabled={isSaving}
+              className="bg-emerald-500 hover:bg-emerald-600"
+            >
+              {isSaving ? "Submitting..." : "Submit"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

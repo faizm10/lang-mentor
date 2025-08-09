@@ -124,3 +124,59 @@ export async function fetchMentorProfiles(): Promise<MentorProfileRow[] | null> 
   // Data is already flat from mentor_profiles table
   return (data as unknown as MentorProfileRow[]) ?? []
 }
+
+export type MenteePreferencesInsert = {
+  full_name: string
+  student_id: number
+  email: string
+  first_choice: string
+  second_choice: string
+  third_choice: string
+}
+
+export async function submitMenteePreferences(payload: MenteePreferencesInsert) {
+  if (!supabase) {
+    console.warn("[supabase] Missing env. Simulating mentee_preferences insert.")
+    return { data: null, error: null, preview: true as const }
+  }
+
+  const { data, error } = await supabase
+    .from("mentee_preferences")
+    .insert(payload)
+    .select("id")
+    .single()
+
+  return { data, error, preview: false as const }
+}
+
+export type MenteePreferencesRow = {
+  id: string
+  submitted_at: string | null
+  full_name: string
+  student_id: number
+  email: string
+  first_choice: string
+  second_choice: string
+  third_choice: string
+}
+
+export async function fetchMenteePreferences(): Promise<MenteePreferencesRow[]> {
+  if (!supabase) {
+    // No preview mock to avoid confusion; return empty list
+    return []
+  }
+
+  const { data, error } = await supabase
+    .from("mentee_preferences")
+    .select(
+      `id, submitted_at, full_name, student_id, email, first_choice, second_choice, third_choice`,
+    )
+    .order("submitted_at", { ascending: false })
+
+  if (error) {
+    console.error("Error fetching mentee preferences:", error)
+    return []
+  }
+
+  return (data as unknown as MenteePreferencesRow[]) ?? []
+}
