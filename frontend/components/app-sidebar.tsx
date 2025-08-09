@@ -16,6 +16,7 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from "@/components/ui/sidebar";
+import Link from "next/link";
 
 const data = {
   versions: ["1.0.0"],
@@ -37,7 +38,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   return (
     <Sidebar {...props}>
       <SidebarHeader className="px-3 py-3">
-        <a href="/" className="flex items-center gap-3 rounded-md px-2 py-2 hover:bg-emerald-50 transition-colors">
+        <Link href="/" className="flex items-center gap-3 rounded-md px-2 py-2 hover:bg-emerald-50 transition-colors">
           <div className="flex h-8 w-8 items-center justify-center rounded-md bg-emerald-600 text-white">
             <GraduationCap className="h-5 w-5" />
           </div>
@@ -45,7 +46,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <span className="text-sm font-semibold text-gray-900">Mentor Matching System</span>
             <span className="text-xs text-gray-500">Admin dashboard</span>
           </div>
-        </a>
+        </Link>
       </SidebarHeader>
       <SidebarContent>
         {/* We create a SidebarGroup for each parent. */}
