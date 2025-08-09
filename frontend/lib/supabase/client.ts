@@ -180,3 +180,23 @@ export async function fetchMenteePreferences(): Promise<MenteePreferencesRow[]> 
 
   return (data as unknown as MenteePreferencesRow[]) ?? []
 }
+
+export type MentorAssignmentInsert = {
+  mentor_id: string
+  mentee_id: string
+  assigned_by?: string | null
+}
+
+export async function saveMentorAssignments(assignments: MentorAssignmentInsert[]) {
+  if (!supabase) {
+    console.warn("[supabase] Missing env. Simulating mentor_assignments upsert.")
+    return { data: null, error: null, preview: true as const }
+  }
+
+  const { data, error } = await supabase
+    .from("mentor_assignments")
+    .upsert(assignments, { onConflict: "mentee_id" })
+    .select("id")
+
+  return { data, error, preview: false as const }
+}

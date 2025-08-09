@@ -19,6 +19,7 @@ import {
   fetchMentorProfiles,
   type MenteePreferencesRow,
   type MentorProfileRow,
+    saveMentorAssignments,
 } from "@/lib/supabase/client";
 
 export default function Dashboard() {
@@ -30,6 +31,7 @@ export default function Dashboard() {
   const [matchingResults, setMatchingResults] = useState<
     { menteeId: string; mentorId: string | null }[]
   >([]);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -121,6 +123,50 @@ export default function Dashboard() {
     return mentors.filter((m) => !chosen.has(m.id));
   }, [baseData, mentors]);
 
+  const handlePairRemaining = () => {
+    if (!matchingRun) return;
+    if (unmatchedMentees.length === 0 || unassignedMentors.length === 0) return;
+
+    const mentorQueue = [...unassignedMentors].map((m) => m.id);
+    if (mentorQueue.length === 0) return;
+
+    const updated = matchingResults.map((mr) => ({ ...mr }));
+    for (const mentee of unmatchedMentees) {
+      const nextMentorId = mentorQueue.shift();
+      if (!nextMentorId) break;
+      const idx = updated.findIndex((r) => r.menteeId === mentee.id);
+      if (idx >= 0) {
+        updated[idx].mentorId = nextMentorId;
+      } else {
+        updated.push({ menteeId: mentee.id, mentorId: nextMentorId });
+      }
+    }
+    setMatchingResults(updated);
+  };
+
+  const handleSavePairings = async () => {
+    if (!matchingRun) return;
+    const valid = matchingResults.filter((r) => r.mentorId);
+    if (valid.length === 0) return;
+    setIsSaving(true);
+    try {
+      const payload = valid.map((r) => ({
+        mentor_id: r.mentorId as string,
+        mentee_id: r.menteeId,
+        assigned_by: null,
+      }));
+      const { error } = await saveMentorAssignments(payload);
+      if (error) {
+        console.error(error);
+        alert("Failed to save pairings. Please try again.");
+        return;
+      }
+      alert("Pairings saved successfully.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <div className="flex flex-col min-h-screen bg-gray-50 p-4 md:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto w-full">
@@ -204,7 +250,24 @@ export default function Dashboard() {
               </TableBody>
             </Table>
             {matchingRun && (
-              <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="mt-8">
+                <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <Button
+                    onClick={handlePairRemaining}
+                    disabled={unmatchedMentees.length === 0 || unassignedMentors.length === 0}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                  >
+                    Pair Remaining Unmatched
+                  </Button>
+                  <Button
+                    onClick={handleSavePairings}
+                    disabled={isSaving || !matchingRun || matchingResults.every((r) => !r.mentorId)}
+                    className="bg-gray-900 hover:bg-black text-white"
+                  >
+                    {isSaving ? "Saving…" : "Save Pairings"}
+                  </Button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <Card className="shadow-sm">
                   <CardHeader>
                     <CardTitle className="text-lg font-semibold text-gray-900">
@@ -263,6 +326,7 @@ export default function Dashboard() {
                     )}
                   </CardContent>
                 </Card>
+                </div>
               </div>
             )}
           </CardContent>
