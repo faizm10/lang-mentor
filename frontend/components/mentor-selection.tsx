@@ -325,11 +325,12 @@ export default function MentorSelection() {
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-10 md:mb-16">
             <h1 className="text-3xl md:text-4xl lg:text-5xl font-extrabold text-gray-900 mb-4 tracking-tight">
-              Select 3 Students to Connect With
+              LSA Mentorship Program - Choose Your Top 3 Mentors
             </h1>
             <p className="text-base md:text-lg text-gray-600 max-w-2xl mx-auto leading-relaxed">
-              Choose up to three LANG students you’d like to connect with for
-              peer mentorship, networking, or collaboration.
+              Read through the Mentor Bios and choose three mentors who best
+              align with your passions, interests, goals, and personality. We’ll
+              do our best to match you with one of your top choices
             </p>
           </div>
 
@@ -664,7 +665,11 @@ export default function MentorSelection() {
           </div>
 
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setIsFormOpen(false)} disabled={isSaving}>
+            <Button
+              variant="ghost"
+              onClick={() => setIsFormOpen(false)}
+              disabled={isSaving}
+            >
               Cancel
             </Button>
             <Button
