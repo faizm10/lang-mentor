@@ -1,119 +1,326 @@
-"use client"
+"use client";
 
-import { useState, useMemo } from "react"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader } from "@/components/ui/card"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Check, ArrowUp, ArrowDown, XCircle } from "lucide-react" // Added XCircle for clear icon
-import { cn } from "@/lib/utils"
-import { langStudentsData } from "@/lib/mentor"
-import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useEffect, useMemo, useState } from "react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  ArrowDown,
+  ArrowUp,
+  Check,
+  Loader2,
+  XCircle,
+  Search,
+  SlidersHorizontal,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+import {
+  fetchMentorProfiles,
+  submitMenteePreferences,
+} from "@/lib/supabase/client";
+
+// Transformed mentor data for the UI
+interface MentorData {
+  id: string;
+  full_name: string;
+  year: string;
+  major: string;
+  minor?: string;
+  avatar: string;
+  hobbies: string[];
+  bio: string;
+}
 
 export default function MentorSelection() {
-  const [selectedStudents, setSelectedStudents] = useState<string[]>([])
-  const [isSubmitted, setIsSubmitted] = useState(false)
-  const [searchQuery, setSearchQuery] = useState<string>("")
-  const [sortBy, setSortBy] = useState<string>("name")
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc")
-  const [selectedMajor, setSelectedMajor] = useState<string>("")
+  // State management for UI and selection (client state is appropriate here) [^1]
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isSubmitted, setIsSubmitted] = useState(false);
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [sortBy, setSortBy] = useState<string>("name");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+  const [selectedMajor, setSelectedMajor] = useState<string>("");
+  const [mentors, setMentors] = useState<MentorData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [fullName, setFullName] = useState("");
+  const [studentId, setStudentId] = useState("");
+  const [email, setEmail] = useState("");
+  const [preferences, setPreferences] = useState<string[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
 
-  const handleSelectStudent = (studentId: string) => {
-    setSelectedStudents((prev) => {
-      if (prev.includes(studentId)) {
-        return prev.filter((id) => id !== studentId)
-      }
-      if (prev.length < 3) {
-        return [...prev, studentId]
-      }
-      return prev
-    })
-  }
+  useEffect(() => {
+    async function loadMentors() {
+      try {
+        setLoading(true);
+        setError(null);
+        const profiles = await fetchMentorProfiles();
+        const transformed: MentorData[] =
+          profiles?.map((row, index) => {
+            const fullName = row.full_name ?? `Student ${index + 1}`;
+            const initials =
+              fullName
+                .split(" ")
+                .map((n) => n.trim()[0])
+                .filter(Boolean)
+                .join("")
+                .slice(0, 2)
+                .toUpperCase() || `S${index + 1}`;
 
-  const clearSelections = () => {
-    setSelectedStudents([])
-  }
+            return {
+              id: row.id,
+              full_name: fullName,
+              year: row.year_of_study ?? "N/A",
+              major: row.program_of_study ?? "Undeclared",
+              minor: undefined,
+              avatar: initials,
+              hobbies: [], // Could be enriched later
+              bio: row.mentor_description ?? "No description provided.",
+            };
+          }) ?? [];
+
+        setMentors(transformed);
+      } catch (e) {
+        console.error(e);
+        setError("Failed to load mentor profiles.");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadMentors();
+  }, []);
+
+  const toggleSelection = (
+    id: string,
+    nextValue?: boolean | "indeterminate"
+  ) => {
+    setSelectedIds((prev) => {
+      const isSelected = prev.includes(id);
+      const shouldSelect =
+        typeof nextValue === "boolean" ? nextValue : !isSelected;
+
+      if (shouldSelect) {
+        if (prev.length >= 3) {
+          toast("Please select exactly 3 students to continue");
+          return prev;
+        }
+        return [...prev, id];
+      } else {
+        return prev.filter((x) => x !== id);
+      }
+    });
+  };
+
+  const clearSelections = () => setSelectedIds([]);
 
   const handleSubmit = () => {
-    if (selectedStudents.length === 3) {
-      setIsSubmitted(true)
-      console.log("Submitting selections:", selectedStudents)
+    if (selectedIds.length === 3) {
+      setIsFormOpen(true);
+    } else {
+      toast("Please select exactly 3 students to continue");
     }
-  }
+  };
+
+  // Keep preferences in sync with current selection when it reaches 3
+  useEffect(() => {
+    if (selectedIds.length === 3) {
+      setPreferences(selectedIds);
+    } else if (preferences.length !== 0) {
+      setPreferences([]);
+    }
+  }, [selectedIds]);
+
+  const movePreferenceUp = (index: number) => {
+    if (index <= 0) return;
+    setPreferences((prev) => {
+      const next = [...prev];
+      [next[index - 1], next[index]] = [next[index], next[index - 1]];
+      return next;
+    });
+  };
+
+  const movePreferenceDown = (index: number) => {
+    if (index >= preferences.length - 1) return;
+    setPreferences((prev) => {
+      const next = [...prev];
+      [next[index + 1], next[index]] = [next[index], next[index + 1]];
+      return next;
+    });
+  };
+
+  const handleFinalSubmit = async () => {
+    if (!fullName.trim() || !studentId.trim() || !email.trim()) {
+      toast("Please fill out your Full Name, Student ID, and Email.");
+      return;
+    }
+    const numericStudentId = Number(studentId.trim());
+    if (!Number.isFinite(numericStudentId)) {
+      toast("Student ID must be a number.");
+      return;
+    }
+    if (preferences.length !== 3) {
+      toast("Please confirm your top 3 order.");
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const [first, second, third] = preferences;
+      const { error } = await submitMenteePreferences({
+        full_name: fullName.trim(),
+        student_id: numericStudentId,
+        email: email.trim(),
+        first_choice: first,
+        second_choice: second,
+        third_choice: third,
+      });
+      if (error) {
+        console.error(error);
+        toast("Submission failed. Please try again.");
+        return;
+      }
+      setIsFormOpen(false);
+      setIsSubmitted(true);
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const handleClearFilters = () => {
-    setSearchQuery("")
-    setSelectedMajor("")
-    setSortBy("name") // Reset sort to default
-    setSortOrder("asc") // Reset sort order to default
-  }
+    setSearchQuery("");
+    setSelectedMajor("");
+    setSortBy("name");
+    setSortOrder("asc");
+  };
 
-  // Extract unique majors for the filter dropdown
   const uniqueMajors = useMemo(() => {
-    const majors = new Set<string>()
-    langStudentsData.forEach((student) => majors.add(student.major))
-    return Array.from(majors).sort()
-  }, [])
+    const majors = new Set<string>();
+    mentors.forEach((m) => majors.add(m.major));
+    return Array.from(majors).sort();
+  }, [mentors]);
 
-  // Filter and sort students based on state
   const displayedStudents = useMemo(() => {
-    const filtered = langStudentsData.filter((student) => {
-      const query = searchQuery.toLowerCase()
+    const query = searchQuery.trim().toLowerCase();
+
+    const filtered = mentors.filter((student) => {
+      const name = (student.full_name || "").toLowerCase();
+      const major = (student.major || "").toLowerCase();
+      const bio = (student.bio || "").toLowerCase();
+      const hobbiesMatch =
+        Array.isArray(student.hobbies) &&
+        student.hobbies.some((h) => (h || "").toLowerCase().includes(query));
+
       const matchesSearch =
-        student.name.toLowerCase().includes(query) ||
-        student.major.toLowerCase().includes(query) ||
-        student.bio.toLowerCase().includes(query) ||
-        (Array.isArray(student.hobbies) && student.hobbies.some((hobby) => hobby.toLowerCase().includes(query)))
+        !query ||
+        name.includes(query) ||
+        major.includes(query) ||
+        bio.includes(query) ||
+        hobbiesMatch;
 
-      const matchesMajor = selectedMajor === "" || selectedMajor === "all-majors" || student.major === selectedMajor
+      const matchesMajor =
+        selectedMajor === "" ||
+        selectedMajor === "all-majors" ||
+        student.major === selectedMajor;
 
-      return matchesSearch && matchesMajor
-    })
+      return matchesSearch && matchesMajor;
+    });
 
     filtered.sort((a, b) => {
-      let compareValue = 0
+      let compareValue = 0;
       if (sortBy === "name") {
-        compareValue = a.name.localeCompare(b.name)
+        compareValue = (a.full_name || "").localeCompare(b.full_name || "");
       } else if (sortBy === "year") {
-        const yearOrder: { [key: string]: number } = {
-          Senior: 3,
-          Junior: 2,
-          Sophomore: 1,
-          Freshman: 0,
-        }
-        compareValue = yearOrder[a.year] - yearOrder[b.year]
+        const yearOrder: Record<string, number> = {
+          Senior: 4,
+          Junior: 3,
+          Sophomore: 2,
+          Freshman: 1,
+          "1st Year": 1,
+          "2nd Year": 2,
+          "3rd Year": 3,
+          "4th Year": 4,
+          "N/A": 0,
+          Undeclared: 0,
+        };
+        compareValue = (yearOrder[a.year] ?? 0) - (yearOrder[b.year] ?? 0);
       }
+      return sortOrder === "asc" ? compareValue : -compareValue;
+    });
 
-      return sortOrder === "asc" ? compareValue : -compareValue
-    })
-
-    return filtered
-  }, [searchQuery, sortBy, sortOrder, selectedMajor])
+    return filtered;
+  }, [searchQuery, sortBy, sortOrder, selectedMajor, mentors]);
 
   if (isSubmitted) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 p-4">
+      <div className="flex flex-col items-center justify-center min-h-[70vh] p-4">
         <Card className="max-w-md w-full p-8 text-center shadow-lg">
           <CardContent className="flex flex-col items-center justify-center p-0">
             <div className="w-16 h-16 bg-emerald-500 rounded-full flex items-center justify-center mx-auto mb-6">
               <Check className="w-8 h-8 text-white" />
             </div>
-            <h2 className="text-3xl font-bold text-gray-900 mb-3">Selection Complete!</h2>
+            <h2 className="text-3xl font-bold text-gray-900 mb-3">
+              Selection Complete!
+            </h2>
             <p className="text-gray-600 mb-4 leading-relaxed">
               Your student selections have been submitted successfully.
             </p>
-            <p className="text-sm text-gray-500">
-              You’ll receive a confirmation email within 24 hours to connect with your peers.
-            </p>
+            {/* <p className="text-sm text-gray-500">
+              You’ll receive a confirmation email within 24 hours to connect
+              with your peers.
+            </p> */}
           </CardContent>
         </Card>
       </div>
-    )
+    );
   }
 
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[70vh] p-4">
+        <Loader2 className="h-10 w-10 animate-spin text-emerald-500" />
+        <p className="mt-4 text-lg text-gray-600">Loading mentors…</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[70vh] p-4">
+        <XCircle className="h-12 w-12 text-red-500" />
+        <p className="mt-4 text-lg text-red-600">{error}</p>
+        <Button onClick={() => location.reload()} className="mt-4">
+          Try Again
+        </Button>
+      </div>
+    );
+  }
+
+  const selectedNames = selectedIds
+    .map((id) => mentors.find((m) => m.id === id)?.full_name)
+    .filter(Boolean)
+    .join(", ");
+
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50">
+    <div className="flex flex-col">
       <div className="flex-1 p-4 md:p-6 lg:p-8">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-10 md:mb-16">
@@ -121,78 +328,145 @@ export default function MentorSelection() {
               Select 3 Students to Connect With
             </h1>
             <p className="text-base md:text-lg text-gray-600 max-w-2xl mx-auto leading-relaxed">
-              Choose up to three LANG students you’d like to connect with for peer mentorship, networking, or
-              collaboration.
+              Choose up to three LANG students you’d like to connect with for
+              peer mentorship, networking, or collaboration.
             </p>
           </div>
 
-          {/* Filter and Sort Controls */}
-          <div className="flex flex-col gap-4 mb-8 max-w-4xl mx-auto">
-            <Input
-              placeholder="Search by name, bio, or hobbies..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="flex-1"
-            />
-            <div className="flex flex-col sm:flex-row gap-4">
-              <Select value={selectedMajor} onValueChange={setSelectedMajor}>
-                <SelectTrigger className="w-full sm:w-[180px]">
-                  <SelectValue placeholder="Filter by Major" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all-majors">All Majors</SelectItem>
-                  {uniqueMajors.map((major) => (
-                    <SelectItem key={major} value={major}>
-                      {major}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          {/* Filters */}
+          <Card className="mb-8 max-w-4xl mx-auto border-gray-200">
+            <CardContent className="p-4 md:p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-emerald-50 text-emerald-600">
+                  <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
+                </div>
+                <h2 className="text-base font-semibold text-gray-900">
+                  Search and filters
+                </h2>
+              </div>
 
-              <Select value={sortBy} onValueChange={setSortBy}>
-                <SelectTrigger className="w-full sm:w-[180px]">
-                  <SelectValue placeholder="Sort by" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="name">Name</SelectItem>
-                  <SelectItem value="year">Year</SelectItem>
-                </SelectContent>
-              </Select>
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
-                aria-label={`Sort order: ${sortOrder === "asc" ? "Ascending" : "Descending"}`}
-              >
-                {sortOrder === "asc" ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />}
-              </Button>
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={handleClearFilters}
-                aria-label="Clear all filters"
-                className="text-gray-600 hover:text-red-600 hover:bg-red-50 bg-transparent"
-              >
-                <XCircle className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
+              <div className="flex flex-col gap-4">
+                <div className="relative">
+                  <Search
+                    className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400"
+                    aria-hidden="true"
+                  />
+                  <Input
+                    placeholder="Search by name, bio, or hobbies..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-9"
+                    aria-label="Search mentors"
+                  />
+                </div>
 
+                <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+                  <Select
+                    value={selectedMajor}
+                    onValueChange={setSelectedMajor}
+                  >
+                    <SelectTrigger
+                      className="w-full sm:w-[220px]"
+                      aria-label="Filter by major"
+                    >
+                      <SelectValue placeholder="Filter by Major" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all-majors">All Majors</SelectItem>
+                      {uniqueMajors.map((major) => (
+                        <SelectItem key={major} value={major}>
+                          {major}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  <Select value={sortBy} onValueChange={setSortBy}>
+                    <SelectTrigger
+                      className="w-full sm:w-[220px]"
+                      aria-label="Sort by"
+                    >
+                      <SelectValue placeholder="Sort by" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="name">Name</SelectItem>
+                      <SelectItem value="year">Year</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() =>
+                        setSortOrder((o) => (o === "asc" ? "desc" : "asc"))
+                      }
+                      aria-label={`Sort order: ${
+                        sortOrder === "asc" ? "Ascending" : "Descending"
+                      }`}
+                    >
+                      {sortOrder === "asc" ? (
+                        <ArrowUp className="h-4 w-4" />
+                      ) : (
+                        <ArrowDown className="h-4 w-4" />
+                      )}
+                    </Button>
+
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={handleClearFilters}
+                      aria-label="Clear all filters"
+                      className="text-gray-700 hover:text-red-600 hover:bg-red-50 bg-transparent"
+                    >
+                      <XCircle className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="text-sm text-gray-500">
+                  {"Showing "}
+                  <span className="font-medium text-gray-700">
+                    {displayedStudents.length}
+                  </span>
+                  {" of "}
+                  <span className="font-medium text-gray-700">
+                    {mentors.length}
+                  </span>
+                  {" students"}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8 mb-12">
             {displayedStudents.length > 0 ? (
               displayedStudents.map((student) => {
-                const isSelected = selectedStudents.includes(student.id)
-                const isDisabled = !isSelected && selectedStudents.length >= 3
+                const isSelected = selectedIds.includes(student.id);
+                const isDisabled = !isSelected && selectedIds.length >= 3;
+
                 return (
                   <Card
                     key={student.id}
+                    role="button"
+                    tabIndex={0}
+                    aria-pressed={isSelected}
                     className={cn(
-                      "relative transition-all duration-200 cursor-pointer h-full flex flex-col",
+                      "relative transition-all duration-200 cursor-pointer h-full flex flex-col focus:outline-none",
                       "hover:shadow-lg",
-                      isSelected ? "border-emerald-500 shadow-md ring-2 ring-emerald-200" : "border-gray-200",
-                      isDisabled && "opacity-60 cursor-not-allowed",
+                      isSelected
+                        ? "border-emerald-500 shadow-md ring-2 ring-emerald-200"
+                        : "border-gray-200",
+                      isDisabled && "opacity-60 cursor-not-allowed"
                     )}
-                    onClick={() => !isDisabled && handleSelectStudent(student.id)}
+                    onClick={() => !isDisabled && toggleSelection(student.id)}
+                    onKeyDown={(e) => {
+                      if ((e.key === "Enter" || e.key === " ") && !isDisabled) {
+                        e.preventDefault();
+                        toggleSelection(student.id);
+                      }
+                    }}
                   >
                     <CardHeader className="pb-3 flex flex-row items-start justify-between">
                       <div className="flex items-center space-x-4">
@@ -200,30 +474,45 @@ export default function MentorSelection() {
                           {student.avatar}
                         </div>
                         <div>
-                          <h3 className="text-xl font-bold text-gray-900">{student.name}</h3>
+                          <h3 className="text-xl font-bold text-gray-900">
+                            {student.full_name}
+                          </h3>
                           <p className="text-sm text-gray-500 mt-0.5">
                             {student.year} – {student.major}
-                            {student.minor && ` / Minor: ${student.minor}`}
+                            {student.minor ? ` / Minor: ${student.minor}` : ""}
                           </p>
                         </div>
                       </div>
-                      <Checkbox checked={isSelected} disabled={isDisabled} className="border-2 w-5 h-5" />
+                      <Checkbox
+                        checked={isSelected}
+                        disabled={isDisabled}
+                        className="border-2 w-5 h-5"
+                        onCheckedChange={(v) => toggleSelection(student.id, v)}
+                        onClick={(e) => e.stopPropagation()}
+                        aria-label={isSelected ? "Deselect" : "Select"}
+                      />
                     </CardHeader>
+
                     <CardContent className="pt-2 pb-4 flex-1">
-                      <div className="flex flex-wrap gap-2 mb-4">
-                        {Array.isArray(student.hobbies) &&
-                          student.hobbies.map((hobby: string) => (
-                            <Badge
-                              key={hobby}
-                              variant="secondary"
-                              className="text-xs px-2.5 py-1 bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-full"
-                            >
-                              {hobby}
-                            </Badge>
-                          ))}
-                      </div>
-                      <p className="text-sm text-gray-700 leading-relaxed line-clamp-3">{student.bio}</p>
+                      {Array.isArray(student.hobbies) &&
+                        student.hobbies.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mb-4">
+                            {student.hobbies.map((hobby, idx) => (
+                              <Badge
+                                key={`${student.id}-${hobby}-${idx}`}
+                                variant="secondary"
+                                className="text-xs px-2.5 py-1 bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-full"
+                              >
+                                {hobby}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                      <p className="text-sm text-gray-700 leading-relaxed">
+                        {student.bio}
+                      </p>
                     </CardContent>
+
                     {isSelected && (
                       <div className="absolute top-3 right-3">
                         <div className="w-7 h-7 bg-emerald-500 rounded-full flex items-center justify-center">
@@ -232,7 +521,7 @@ export default function MentorSelection() {
                       </div>
                     )}
                   </Card>
-                )
+                );
               })
             ) : (
               <div className="col-span-full text-center text-gray-500 text-lg py-10">
@@ -242,7 +531,9 @@ export default function MentorSelection() {
           </div>
         </div>
       </div>
-      {selectedStudents.length > 0 && (
+
+      {/* Sticky footer */}
+      {selectedIds.length > 0 && (
         <div className="sticky bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200 shadow-lg">
           <div className="p-4 md:p-6">
             <Card className="max-w-2xl mx-auto shadow-none border-none bg-transparent">
@@ -250,10 +541,10 @@ export default function MentorSelection() {
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                   <div>
                     <h3 className="font-semibold text-gray-900 text-lg">
-                      {selectedStudents.length} of 3 students selected
+                      {selectedIds.length} of 3 students selected
                     </h3>
                     <p className="text-sm text-gray-600 mt-1 line-clamp-1">
-                      {selectedStudents.map((id) => langStudentsData.find((s) => s.id === id)?.name).join(", ")}
+                      {selectedNames}
                     </p>
                   </div>
                   <div className="flex items-center space-x-3">
@@ -261,16 +552,18 @@ export default function MentorSelection() {
                       variant="ghost"
                       size="sm"
                       onClick={clearSelections}
-                      className="text-gray-600 hover:text-red-600 hover:bg-red-50"
+                      className="text-gray-700 hover:text-red-600 hover:bg-red-50"
                     >
                       Clear all
                     </Button>
                     <Button
                       onClick={handleSubmit}
-                      disabled={selectedStudents.length !== 3}
+                      disabled={selectedIds.length !== 3}
                       className="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-2 rounded-md"
                     >
-                      {selectedStudents.length === 3 ? "Submit Selection" : "Continue"}
+                      {selectedIds.length === 3
+                        ? "Submit Selection"
+                        : "Continue"}
                     </Button>
                   </div>
                 </div>
@@ -279,6 +572,111 @@ export default function MentorSelection() {
           </div>
         </div>
       )}
+
+      {/* Preferences + Info Form */}
+      <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Confirm your details</DialogTitle>
+            <DialogDescription>
+              Provide your info and order your top 3 selections.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="fullName">Full Name</Label>
+                <Input
+                  id="fullName"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="e.g., Jane Doe"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="studentId">Student ID</Label>
+                <Input
+                  id="studentId"
+                  value={studentId}
+                  onChange={(e) => setStudentId(e.target.value)}
+                  placeholder="e.g., 1234567"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="email">Email Address</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="e.g., jane.doe@uoguelph.ca"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Top 3 order</Label>
+              <div className="space-y-2">
+                {preferences.map((id, index) => {
+                  const mentorName =
+                    mentors.find((m) => m.id === id)?.full_name || "Unknown";
+                  return (
+                    <div
+                      key={id}
+                      className="flex items-center justify-between rounded-md border p-2"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm font-medium w-6 text-gray-600">
+                          {index + 1}.
+                        </span>
+                        <span className="text-sm text-gray-900">
+                          {mentorName}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          onClick={() => movePreferenceUp(index)}
+                          disabled={index === 0}
+                          aria-label="Move up"
+                        >
+                          <ArrowUp className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          onClick={() => movePreferenceDown(index)}
+                          disabled={index === preferences.length - 1}
+                          aria-label="Move down"
+                        >
+                          <ArrowDown className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setIsFormOpen(false)} disabled={isSaving}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleFinalSubmit}
+              disabled={isSaving}
+              className="bg-emerald-500 hover:bg-emerald-600"
+            >
+              {isSaving ? "Submitting..." : "Submit"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
-  )
+  );
 }
