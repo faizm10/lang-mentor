@@ -306,7 +306,7 @@ export default function MenteeRegistration({ onComplete }: MenteeRegistrationPro
             {/* Info Alert */}
             <Alert>
               <AlertDescription>
-                <strong>Important:</strong> After completing this registration, you'll be able to browse and select your top 3 mentors from our available pool. Make sure all information is accurate before proceeding.
+                <strong>Important:</strong> After completing this registration, you`&apos;`ll be redirected to a page where you`&apos;`ll be able to browse and select your top 3 mentors from our available pool. Make sure all information is accurate before proceeding.
               </AlertDescription>
             </Alert>
 

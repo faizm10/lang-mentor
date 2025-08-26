@@ -62,7 +62,7 @@ export default function AssignmentsPage() {
           setAssignments((assignData as unknown as AssignmentRow[]) ?? []);
           const mentorNameMap = new Map((mentors ?? []).map((m) => [m.id, m.full_name] as const));
           setMentorMap(mentorNameMap);
-          const menteeNameMap = new Map((mentees ?? []).map((m) => [m.id, m.full_name] as const));
+          const menteeNameMap = new Map((mentees ?? []).map((m) => [m.id, m.first_name] as const));
           setMenteeMap(menteeNameMap);
         }
       } catch (e) {

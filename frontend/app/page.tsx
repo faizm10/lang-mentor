@@ -1,14 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import MentorSelection from "@/components/mentor-selection";
 import MenteeRegistration, { MenteeData } from "@/components/mentee-registration";
 import Navigation from "@/components/navigation";
 import { Toaster } from "sonner";
 
 export default function Home() {
-  const router = useRouter();
   const [menteeData, setMenteeData] = useState<MenteeData | null>(null);
 
   const handleRegistrationComplete = (data: MenteeData) => {

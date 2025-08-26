@@ -146,13 +146,13 @@ export default function MentorSelection({ menteeData, onReset, onSubmissionCompl
   };
 
   // Keep preferences in sync with current selection when it reaches 3
-  useEffect(() => {
-    if (selectedIds.length === 3) {
-      setPreferences(selectedIds);
-    } else if (preferences.length !== 0) {
-      setPreferences([]);
-    }
-  }, [selectedIds]);
+ useEffect(() => {
+  if (selectedIds.length === 3) {
+    setPreferences(selectedIds);
+  } else if (preferences.length !== 0) {
+    setPreferences([]);
+  }
+}, [selectedIds, preferences]);
 
   const movePreferenceUp = (index: number) => {
     if (index <= 0) return;
