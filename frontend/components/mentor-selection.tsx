@@ -37,6 +37,7 @@ import {
   fetchMentorProfiles,
   submitMenteePreferences,
 } from "@/lib/supabase/client";
+import { MenteeData } from "./mentee-registration";
 
 // Transformed mentor data for the UI
 interface MentorData {
@@ -50,7 +51,13 @@ interface MentorData {
   bio: string;
 }
 
-export default function MentorSelection() {
+interface MentorSelectionProps {
+  menteeData: MenteeData;
+  onReset: () => void;
+  onSubmissionComplete?: () => void;
+}
+
+export default function MentorSelection({ menteeData, onReset, onSubmissionComplete }: MentorSelectionProps) {
   // State management for UI and selection (client state is appropriate here) [^1]
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -62,9 +69,6 @@ export default function MentorSelection() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [fullName, setFullName] = useState("");
-  const [studentId, setStudentId] = useState("");
-  const [email, setEmail] = useState("");
   const [preferences, setPreferences] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -169,15 +173,6 @@ export default function MentorSelection() {
   };
 
   const handleFinalSubmit = async () => {
-    if (!fullName.trim() || !studentId.trim() || !email.trim()) {
-      toast("Please fill out your Full Name, Student ID, and Email.");
-      return;
-    }
-    const numericStudentId = Number(studentId.trim());
-    if (!Number.isFinite(numericStudentId)) {
-      toast("Student ID must be a number.");
-      return;
-    }
     if (preferences.length !== 3) {
       toast("Please confirm your top 3 order.");
       return;
@@ -186,9 +181,13 @@ export default function MentorSelection() {
     try {
       const [first, second, third] = preferences;
       const { error } = await submitMenteePreferences({
-        full_name: fullName.trim(),
-        student_id: numericStudentId,
-        email: email.trim(),
+        first_name: menteeData.firstName,
+        last_name: menteeData.lastName,
+        student_id: parseInt(menteeData.studentId),
+        email: menteeData.email,
+        program: menteeData.program,
+        major: menteeData.major,
+        year: menteeData.year,
         first_choice: first,
         second_choice: second,
         third_choice: third,
@@ -200,6 +199,9 @@ export default function MentorSelection() {
       }
       setIsFormOpen(false);
       setIsSubmitted(true);
+      if (onSubmissionComplete) {
+        onSubmissionComplete();
+      }
     } finally {
       setIsSaving(false);
     }
@@ -324,11 +326,21 @@ export default function MentorSelection() {
       <div className="flex-1 p-4 md:p-6 lg:p-8">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-10 md:mb-16">
+            <div className="flex justify-end mb-4">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onReset}
+                className="text-gray-600 hover:text-gray-800"
+              >
+                Change Registration Info
+              </Button>
+            </div>
             <h1 className="text-3xl md:text-4xl lg:text-5xl font-extrabold text-gray-900 mb-4 tracking-tight">
-              LSA Mentorship Program - Choose Your Top 3 Mentors
+              LSA Mentorship Program - Mentor Bank
             </h1>
             <p className="text-base md:text-lg text-gray-600 max-w-2xl mx-auto leading-relaxed">
-              Read through the Mentor Bios and choose three mentors who best
+              Browse our Mentor Bank and select your top 3 choices. Read through the mentor bios and choose mentors who best
               align with your passions, interests, goals, and personality. We’ll
               do our best to match you with one of your top choices
             </p>
@@ -578,41 +590,43 @@ export default function MentorSelection() {
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Confirm your details</DialogTitle>
+            <DialogTitle>Confirm your selection</DialogTitle>
             <DialogDescription>
-              Provide your info and order your top 3 selections.
+              Review your information and order your top 3 mentor preferences.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
-            <div className="grid grid-cols-1 gap-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="fullName">Full Name</Label>
-                <Input
-                  id="fullName"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  placeholder="e.g., Jane Doe"
-                />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-sm font-medium">Full Name</Label>
+                <div className="p-2 bg-gray-50 rounded-md border text-sm">
+                  {menteeData.firstName} {menteeData.lastName}
+                </div>
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="studentId">Student ID</Label>
-                <Input
-                  id="studentId"
-                  value={studentId}
-                  onChange={(e) => setStudentId(e.target.value)}
-                  placeholder="e.g., 1234567"
-                />
+              <div className="space-y-1">
+                <Label className="text-sm font-medium">Student ID</Label>
+                <div className="p-2 bg-gray-50 rounded-md border text-sm">
+                  {menteeData.studentId}
+                </div>
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="email">Email Address</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="e.g., jane.doe@uoguelph.ca"
-                />
+              <div className="space-y-1">
+                <Label className="text-sm font-medium">Email</Label>
+                <div className="p-2 bg-gray-50 rounded-md border text-sm">
+                  {menteeData.email}
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-sm font-medium">Year</Label>
+                <div className="p-2 bg-gray-50 rounded-md border text-sm">
+                  {menteeData.year}
+                </div>
+              </div>
+              <div className="col-span-2 space-y-1">
+                <Label className="text-sm font-medium">Program & Major</Label>
+                <div className="p-2 bg-gray-50 rounded-md border text-sm">
+                  {menteeData.program} - {menteeData.major}
+                </div>
               </div>
             </div>
 

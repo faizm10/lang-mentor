@@ -126,9 +126,13 @@ export async function fetchMentorProfiles(): Promise<MentorProfileRow[] | null> 
 }
 
 export type MenteePreferencesInsert = {
-  full_name: string
+  first_name: string
+  last_name: string
   student_id: number
   email: string
+  program: string
+  major: string
+  year: string
   first_choice: string
   second_choice: string
   third_choice: string
@@ -152,9 +156,13 @@ export async function submitMenteePreferences(payload: MenteePreferencesInsert) 
 export type MenteePreferencesRow = {
   id: string
   submitted_at: string | null
-  full_name: string
+  first_name: string
+  last_name: string
   student_id: number
   email: string
+  program: string
+  major: string
+  year: string
   first_choice: string
   second_choice: string
   third_choice: string
@@ -169,7 +177,7 @@ export async function fetchMenteePreferences(): Promise<MenteePreferencesRow[]> 
   const { data, error } = await supabase
     .from("mentee_preferences")
     .select(
-      `id, submitted_at, full_name, student_id, email, first_choice, second_choice, third_choice`,
+      `id, submitted_at, first_name, last_name, student_id, email, program, major, year, first_choice, second_choice, third_choice`,
     )
     .order("submitted_at", { ascending: false })
 

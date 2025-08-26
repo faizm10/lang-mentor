@@ -67,7 +67,7 @@ export default function Dashboard() {
   const baseData = useMemo(() => {
     return prefs.map((row) => ({
       id: row.id,
-      name: row.full_name,
+      name: `${row.first_name} ${row.last_name}`,
       topChoices: [row.first_choice, row.second_choice, row.third_choice].filter(
         Boolean,
       ) as string[],
