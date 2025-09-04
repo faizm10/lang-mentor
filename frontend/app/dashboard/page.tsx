@@ -15,6 +15,13 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   fetchMenteePreferences,
   fetchMentorProfiles,
   type MenteePreferencesRow,
@@ -32,6 +39,8 @@ export default function Dashboard() {
     { menteeId: string; mentorId: string | null }[]
   >([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [selectedMentee, setSelectedMentee] = useState<MenteePreferencesRow | null>(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -71,6 +80,7 @@ export default function Dashboard() {
       topChoices: [row.first_choice, row.second_choice, row.third_choice].filter(
         Boolean,
       ) as string[],
+      menteeData: row, // Store the full mentee data for the dialog
     }));
   }, [prefs]);
 
@@ -165,6 +175,16 @@ export default function Dashboard() {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleMenteeClick = (mentee: typeof baseData[0]) => {
+    setSelectedMentee(mentee.menteeData);
+    setIsDialogOpen(true);
+  };
+
+  const closeDialog = () => {
+    setIsDialogOpen(false);
+    setSelectedMentee(null);
   };
 
   return (
@@ -266,7 +286,14 @@ export default function Dashboard() {
               <TableBody>
                 {displayData.map((mentee) => (
                   <TableRow key={mentee.id}>
-                    <TableCell className="font-medium">{mentee.name}</TableCell>
+                    <TableCell className="font-medium">
+                      <button
+                        onClick={() => handleMenteeClick(mentee)}
+                        className="text-blue-600 hover:text-blue-800 hover:underline cursor-pointer transition-colors"
+                      >
+                        {mentee.name}
+                      </button>
+                    </TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-1">
                         {mentee.topChoices.map((choiceId) => (
@@ -333,7 +360,14 @@ export default function Dashboard() {
                     {unmatchedMentees.length > 0 ? (
                       <ul className="list-disc pl-5 space-y-1 text-gray-700">
                         {unmatchedMentees.map((mentee) => (
-                          <li key={mentee.id}>{mentee.name}</li>
+                          <li key={mentee.id}>
+                            <button
+                              onClick={() => handleMenteeClick(mentee)}
+                              className="text-blue-600 hover:text-blue-800 hover:underline cursor-pointer transition-colors"
+                            >
+                              {mentee.name}
+                            </button>
+                          </li>
                         ))}
                       </ul>
                     ) : (
@@ -387,6 +421,99 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Mentee Details Dialog */}
+      <Dialog open={isDialogOpen} onOpenChange={closeDialog}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Mentee Details</DialogTitle>
+            <DialogDescription>
+              Complete information submitted by {selectedMentee?.first_name} {selectedMentee?.last_name}
+            </DialogDescription>
+          </DialogHeader>
+          
+          {selectedMentee && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-gray-700">First Name</label>
+                  <p className="text-sm text-gray-900 mt-1">{selectedMentee.first_name}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Last Name</label>
+                  <p className="text-sm text-gray-900 mt-1">{selectedMentee.last_name}</p>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Student ID</label>
+                  <p className="text-sm text-gray-900 mt-1">{selectedMentee.student_id}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Email</label>
+                  <p className="text-sm text-gray-900 mt-1">{selectedMentee.email}</p>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Program</label>
+                  <p className="text-sm text-gray-900 mt-1">{selectedMentee.program}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Major</label>
+                  <p className="text-sm text-gray-900 mt-1">{selectedMentee.major}</p>
+                </div>
+              </div>
+              
+              <div>
+                <label className="text-sm font-medium text-gray-700">Year</label>
+                <p className="text-sm text-gray-900 mt-1">{selectedMentee.year}</p>
+              </div>
+              
+              <div>
+                <label className="text-sm font-medium text-gray-700">Mentor Preferences</label>
+                <div className="mt-2 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                      1st Choice
+                    </Badge>
+                    <span className="text-sm text-gray-900">
+                      {mentorNameMap.get(selectedMentee.first_choice) || "Unknown"}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                      2nd Choice
+                    </Badge>
+                    <span className="text-sm text-gray-900">
+                      {mentorNameMap.get(selectedMentee.second_choice) || "Unknown"}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
+                      3rd Choice
+                    </Badge>
+                    <span className="text-sm text-gray-900">
+                      {mentorNameMap.get(selectedMentee.third_choice) || "Unknown"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              
+              {selectedMentee.submitted_at && (
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Submitted At</label>
+                  <p className="text-sm text-gray-900 mt-1">
+                    {new Date(selectedMentee.submitted_at).toLocaleString()}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
