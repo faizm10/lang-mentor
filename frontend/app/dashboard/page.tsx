@@ -428,7 +428,7 @@ export default function Dashboard() {
           <DialogHeader>
             <DialogTitle>Mentee Details</DialogTitle>
             <DialogDescription>
-              Complete information submitted by {selectedMentee?.first_name} {selectedMentee?.last_name}
+              Full information submitted by {selectedMentee?.first_name} {selectedMentee?.last_name}
             </DialogDescription>
           </DialogHeader>
           
