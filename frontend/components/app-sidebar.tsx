@@ -27,6 +27,7 @@ const data = {
       items: [
         { title: "Home", url: "/" },
         { title: "Matching", url: "/dashboard" },
+        { title: "Mentors", url: "/dashboard/mentors" },
         { title: "Assignments", url: "/dashboard/assignments" },
       ],
     },
