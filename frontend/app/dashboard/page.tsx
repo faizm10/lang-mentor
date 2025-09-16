@@ -29,7 +29,6 @@ import {
   type MentorProfileRow,
   saveMentorAssignments,
 } from "@/lib/supabase/client";
-import { MenteeTable } from "@/components/mentor";
 
 export default function Dashboard() {
   const [prefs, setPrefs] = useState<MenteePreferencesRow[]>([]);

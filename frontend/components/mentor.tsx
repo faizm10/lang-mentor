@@ -50,7 +50,7 @@ export function MenteeTable() {
 
         // Fetch mentor names for all choice IDs
         const choiceIds = new Set<string>()
-        menteesData?.forEach((mentee: any) => {
+        menteesData?.forEach((mentee: { first_choice?: string; second_choice?: string; third_choice?: string }) => {
           if (mentee.first_choice) choiceIds.add(mentee.first_choice)
           if (mentee.second_choice) choiceIds.add(mentee.second_choice)
           if (mentee.third_choice) choiceIds.add(mentee.third_choice)
@@ -71,18 +71,18 @@ export function MenteeTable() {
         }
 
         const mentorMap = new Map(
-          mentorsData?.map((m: any) => [m.id, m.full_name]) || []
+          mentorsData?.map((m: { id: string; full_name: string }) => [m.id, m.full_name]) || []
         )
 
         console.log("Mentor map size:", mentorMap.size)
         console.log("Sample mentor map entries:", Array.from(mentorMap.entries()).slice(0, 3))
 
         const transformedData: MenteeData[] =
-          menteesData?.map((mentee: any) => {
+          menteesData?.map((mentee: { id: string; first_name: string; last_name: string; first_choice?: string; second_choice?: string; third_choice?: string; mentor_assignments?: Array<{ mentor_profiles?: { full_name: string } }> }) => {
             // Get top 3 mentor choices
-            const firstChoice = mentorMap.get(mentee.first_choice) || "Unknown"
-            const secondChoice = mentorMap.get(mentee.second_choice) || "Unknown"
-            const thirdChoice = mentorMap.get(mentee.third_choice) || "Unknown"
+            const firstChoice = mentee.first_choice ? mentorMap.get(mentee.first_choice) || "Unknown" : "Unknown"
+            const secondChoice = mentee.second_choice ? mentorMap.get(mentee.second_choice) || "Unknown" : "Unknown"
+            const thirdChoice = mentee.third_choice ? mentorMap.get(mentee.third_choice) || "Unknown" : "Unknown"
             
             const preferences = [firstChoice, secondChoice, thirdChoice]
 

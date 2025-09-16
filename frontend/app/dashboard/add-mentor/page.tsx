@@ -101,7 +101,7 @@ export default function AddMentorPage() {
       const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
       const supabase = createClient(url, key);
 
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from("mentor_profiles")
         .insert([{
           full_name: formData.full_name.trim(),

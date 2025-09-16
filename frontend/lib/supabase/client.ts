@@ -113,7 +113,7 @@ export async function fetchMentorProfiles(): Promise<MentorProfileRow[] | null> 
     console.debug("[supabase] fetchMentorProfiles: using full select", {
       count: full.data.length,
     })
-    return (full.data as unknown as MentorProfileRow[]).map((row: any) => ({
+    return (full.data as unknown as MentorProfileRow[]).map((row: { id: string; created_at?: string | null; pronouns?: string | null; year_of_study?: string | null; program_of_study?: string | null; mentor_description?: string | null; linkedin_url?: string | null; full_name: string; email: string }) => ({
       id: row.id,
       created_at: row.created_at ?? null,
       pronouns: row.pronouns ?? null,
@@ -140,7 +140,7 @@ export async function fetchMentorProfiles(): Promise<MentorProfileRow[] | null> 
     count: minimal.data?.length ?? 0,
   })
 
-  return (minimal.data as any[]).map((row) => ({
+  return (minimal.data as { id: string; full_name: string }[]).map((row) => ({
     id: row.id as string,
     created_at: null,
     pronouns: null,
@@ -167,7 +167,7 @@ export async function fetchMentorNamesByIds(ids: string[]): Promise<{ id: string
     return []
   }
   console.debug("[supabase] fetchMentorNamesByIds: response", { count: data?.length ?? 0, data })
-  return (data as any[]).map((row) => ({ id: row.id as string, full_name: row.full_name as string }))
+  return (data as { id: string; full_name: string }[]).map((row) => ({ id: row.id as string, full_name: row.full_name as string }))
 }
 
 export type MenteePreferencesInsert = {
