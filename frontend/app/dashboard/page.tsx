@@ -24,10 +24,12 @@ import {
 import {
   fetchMenteePreferences,
   fetchMentorProfiles,
+  fetchMentorNamesByIds,
   type MenteePreferencesRow,
   type MentorProfileRow,
-    saveMentorAssignments,
+  saveMentorAssignments,
 } from "@/lib/supabase/client";
+import { MenteeTable } from "@/components/mentor";
 
 export default function Dashboard() {
   const [prefs, setPrefs] = useState<MenteePreferencesRow[]>([]);
@@ -52,9 +54,48 @@ export default function Dashboard() {
           fetchMenteePreferences(),
           fetchMentorProfiles(),
         ]);
+        console.debug("[dashboard] loaded", {
+          mentees: p?.length ?? 0,
+          mentors: m?.length ?? 0,
+        });
+        // Ensure we have names for all mentor IDs referenced by mentee choices
+        const choiceIds = new Set<string>();
+        (p ?? []).forEach((row) => {
+          if (row.first_choice) choiceIds.add(row.first_choice);
+          if (row.second_choice) choiceIds.add(row.second_choice);
+          if (row.third_choice) choiceIds.add(row.third_choice);
+        });
+        const knownIds = new Set((m ?? []).map((mm) => mm.id));
+        const missingIds = Array.from(choiceIds).filter((id) => !knownIds.has(id));
+        console.debug("[dashboard] mapping", {
+          choiceIds: choiceIds.size,
+          knownMentorIds: knownIds.size,
+          missingIds: missingIds.length,
+          missingIdsList: missingIds,
+        });
+        let backfill: { id: string; full_name: string }[] = [];
+        if (missingIds.length > 0) {
+          backfill = await fetchMentorNamesByIds(missingIds);
+        }
+        console.debug("[dashboard] backfill results", { count: backfill.length, backfill });
+        const mergedMentors: MentorProfileRow[] = [
+          ...(m ?? []),
+          ...backfill.map((b) => ({
+            id: b.id,
+            created_at: null,
+            pronouns: null,
+            year_of_study: null,
+            program_of_study: null,
+            mentor_description: null,
+            linkedin_url: null,
+            full_name: b.full_name,
+            email: "",
+          } as MentorProfileRow)),
+        ];
+        console.debug("[dashboard] mergedMentors length", (mergedMentors ?? []).length);
         if (!cancelled) {
           setPrefs(p ?? []);
-          setMentors(m ?? []);
+          setMentors(mergedMentors);
         }
       } catch (e) {
         console.error(e);
@@ -70,7 +111,15 @@ export default function Dashboard() {
   }, []);
 
   const mentorNameMap = useMemo(() => {
-    return new Map(mentors.map((m) => [m.id, m.full_name] as const));
+    const entries: [string, string][] = [];
+    for (const m of mentors) {
+      if (m.id) entries.push([m.id, m.full_name]);
+      // Some historical mentee choices might reference the linked users.id
+      // Include that mapping when available to resolve names.
+      if (m.user_id) entries.push([m.user_id, m.full_name]);
+    }
+    console.debug("[dashboard] mentorNameMap size", entries.length);
+    return new Map(entries);
   }, [mentors]);
 
   const baseData = useMemo(() => {
@@ -188,6 +237,7 @@ export default function Dashboard() {
   };
 
   return (
+    <>
     <div className="flex flex-col min-h-screen bg-gray-50 p-4 md:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto w-full">
         <Card className="shadow-lg">
@@ -515,5 +565,7 @@ export default function Dashboard() {
         </DialogContent>
       </Dialog>
     </div>
+    {/* <MenteeTable /> */}
+    </>
   );
 }

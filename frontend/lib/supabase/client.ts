@@ -24,6 +24,7 @@ export type MentorProfileRow = {
   linkedin_url: string | null
   full_name: string
   email: string
+  user_id?: string | null
 }
 
 const mockMentors: MentorProfileRow[] = [
@@ -101,28 +102,72 @@ export async function fetchMentorProfiles(): Promise<MentorProfileRow[] | null> 
     return mockMentors
   }
 
-  const { data, error } = await supabase.from("mentor_profiles").select(
-    `
-      id,
-      created_at,
-      pronouns,
-      year_of_study,
-      program_of_study,
-      mentor_description,
-      linkedin_url,
-      full_name,
-      email
-    `,
-  )
+  // Try full select first
+  const full = await supabase
+    .from("mentor_profiles")
+    .select(
+      `id, created_at, pronouns, year_of_study, program_of_study, mentor_description, linkedin_url, full_name, email`,
+    )
 
-  if (error) {
-    console.error("Error fetching mentor profiles:", error)
-    // Fallback to mock in case of errors (preview-friendly)
-    return mockMentors
+  if (!full.error && full.data) {
+    console.debug("[supabase] fetchMentorProfiles: using full select", {
+      count: full.data.length,
+    })
+    return (full.data as unknown as MentorProfileRow[]).map((row: any) => ({
+      id: row.id,
+      created_at: row.created_at ?? null,
+      pronouns: row.pronouns ?? null,
+      year_of_study: row.year_of_study ?? null,
+      program_of_study: row.program_of_study ?? null,
+      mentor_description: row.mentor_description ?? null,
+      linkedin_url: row.linkedin_url ?? null,
+      full_name: row.full_name,
+      email: row.email,
+      user_id: null,
+    }))
   }
 
-  // Data is already flat from mentor_profiles table
-  return (data as unknown as MentorProfileRow[]) ?? []
+  // If RLS restricts some columns, retry with minimal fields to allow ID-name mapping
+  const minimal = await supabase
+    .from("mentor_profiles")
+    .select(`id, full_name`)
+
+  if (minimal.error) {
+    console.error("Error fetching mentor profiles:", minimal.error)
+    return []
+  }
+  console.debug("[supabase] fetchMentorProfiles: using minimal select", {
+    count: minimal.data?.length ?? 0,
+  })
+
+  return (minimal.data as any[]).map((row) => ({
+    id: row.id as string,
+    created_at: null,
+    pronouns: null,
+    year_of_study: null,
+    program_of_study: null,
+    mentor_description: null,
+    linkedin_url: null,
+    full_name: row.full_name as string,
+    email: "",
+    user_id: null,
+  })) as MentorProfileRow[]
+}
+
+export async function fetchMentorNamesByIds(ids: string[]): Promise<{ id: string; full_name: string }[]> {
+  if (!supabase) return []
+  if (ids.length === 0) return []
+  console.debug("[supabase] fetchMentorNamesByIds: request", { idsCount: ids.length, ids })
+  const { data, error } = await supabase
+    .from("mentor_profiles")
+    .select("id, full_name")
+    .in("id", ids)
+  if (error) {
+    console.error("Error fetching mentor names by ids:", error)
+    return []
+  }
+  console.debug("[supabase] fetchMentorNamesByIds: response", { count: data?.length ?? 0, data })
+  return (data as any[]).map((row) => ({ id: row.id as string, full_name: row.full_name as string }))
 }
 
 export type MenteePreferencesInsert = {
