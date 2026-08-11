@@ -36,7 +36,7 @@ import { toast } from "sonner";
 import {
   fetchMentorProfiles,
   submitMenteePreferences,
-} from "@/lib/supabase/client";
+} from "@/lib/db/actions";
 import { MenteeData } from "./mentee-registration";
 
 // Transformed mentor data for the UI
