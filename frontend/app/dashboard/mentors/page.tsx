@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { fetchMentorProfiles, type MentorProfileRow } from "@/lib/supabase/client";
+import { fetchMentorProfiles, type MentorProfileRow } from "@/lib/db/actions";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
@@ -40,7 +40,7 @@ export default function MentorsPage() {
         <Card className="shadow-lg">
           <CardHeader>
             <CardTitle className="text-2xl font-bold text-gray-900">Mentors</CardTitle>
-            <p className="text-gray-600">Listing mentors from Supabase.</p>
+            <p className="text-gray-600">Listing mentors from the database.</p>
           </CardHeader>
           <CardContent>
             {loading && (
