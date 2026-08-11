@@ -13,20 +13,12 @@ import {
 import {
   fetchMentorProfiles,
   fetchMenteePreferences,
-} from "@/lib/supabase/client";
-
-// Simple fetcher for assignments (kept here to avoid overgrowing client.ts for now)
-import { createClient } from "@supabase/supabase-js";
-
-type AssignmentRow = {
-  id: string;
-  mentor_id: string | null;
-  mentee_id: string;
-  assigned_at: string | null;
-};
+  fetchMentorAssignments,
+  type MentorAssignmentRow,
+} from "@/lib/db/actions";
 
 export default function AssignmentsPage() {
-  const [assignments, setAssignments] = useState<AssignmentRow[]>([]);
+  const [assignments, setAssignments] = useState<MentorAssignmentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [mentorMap, setMentorMap] = useState<Map<string, string>>(new Map());
@@ -39,27 +31,14 @@ export default function AssignmentsPage() {
         setLoading(true);
         setError(null);
 
-        const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-        const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-        const supabase = createClient(url, key);
-
-        const [
-          { data: assignData, error: assignErr },
-          mentors,
-          mentees,
-        ] = await Promise.all([
-          supabase
-            .from("mentor_assignments")
-            .select("id, mentor_id, mentee_id, assigned_at")
-            .order("assigned_at", { ascending: false }),
+        const [assignData, mentors, mentees] = await Promise.all([
+          fetchMentorAssignments(),
           fetchMentorProfiles(),
           fetchMenteePreferences(),
         ]);
 
-        if (assignErr) throw assignErr;
-
         if (!cancelled) {
-          setAssignments((assignData as unknown as AssignmentRow[]) ?? []);
+          setAssignments(assignData);
           const mentorNameMap = new Map((mentors ?? []).map((m) => [m.id, m.full_name] as const));
           setMentorMap(mentorNameMap);
           const menteeNameMap = new Map((mentees ?? []).map((m) => [m.id, m.first_name] as const));
