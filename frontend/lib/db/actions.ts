@@ -22,75 +22,6 @@ export type MentorProfileRow = {
   user_id?: string | null
 }
 
-const mockMentors: MentorProfileRow[] = [
-  {
-    id: "00000000-0000-0000-0000-000000000001",
-    created_at: null,
-    pronouns: "she/her",
-    year_of_study: "Senior",
-    program_of_study: "Computer Science",
-    mentor_description: "I love frontend, design systems, and mentorship.",
-    linkedin_url: null,
-    full_name: "Alicia Koch",
-    email: "alicia@example.com",
-  },
-  {
-    id: "00000000-0000-0000-0000-000000000002",
-    created_at: null,
-    pronouns: "he/him",
-    year_of_study: "Junior",
-    program_of_study: "Data Science",
-    mentor_description: "Into ML ops and data visualization.",
-    linkedin_url: null,
-    full_name: "James Watson",
-    email: "james@example.com",
-  },
-  {
-    id: "00000000-0000-0000-0000-000000000003",
-    created_at: null,
-    pronouns: "they/them",
-    year_of_study: "Sophomore",
-    program_of_study: "Information Systems",
-    mentor_description: "Backend APIs and community building.",
-    linkedin_url: null,
-    full_name: "Taylor Brooks",
-    email: "taylor@example.com",
-  },
-  {
-    id: "00000000-0000-0000-0000-000000000004",
-    created_at: null,
-    pronouns: null,
-    year_of_study: "Freshman",
-    program_of_study: "Business",
-    mentor_description: "Exploring product management and startups.",
-    linkedin_url: null,
-    full_name: "Jordan Lee",
-    email: "jordan@example.com",
-  },
-  {
-    id: "00000000-0000-0000-0000-000000000005",
-    created_at: null,
-    pronouns: "he/him",
-    year_of_study: "Senior",
-    program_of_study: "Mathematics",
-    mentor_description: "Competitive programming and proofs.",
-    linkedin_url: null,
-    full_name: "Marco Diaz",
-    email: "marco@example.com",
-  },
-  {
-    id: "00000000-0000-0000-0000-000000000006",
-    created_at: null,
-    pronouns: "she/her",
-    year_of_study: "Junior",
-    program_of_study: "Computer Science",
-    mentor_description: "Web performance and accessibility.",
-    linkedin_url: null,
-    full_name: "Priya Sharma",
-    email: "priya@example.com",
-  },
-]
-
 function toIso(value: Date | string | null | undefined): string | null {
   if (!value) return null
   if (value instanceof Date) return value.toISOString()
@@ -99,7 +30,7 @@ function toIso(value: Date | string | null | undefined): string | null {
 
 export async function fetchMentorProfiles(): Promise<MentorProfileRow[] | null> {
   if (!isDbConfigured() || !db) {
-    return mockMentors
+    return []
   }
 
   try {
@@ -382,6 +313,183 @@ export async function createMentorProfile(payload: CreateMentorProfileInput) {
       data: null,
       error: error instanceof Error ? error : new Error(String(error)),
       preview: false as const,
+    }
+  }
+}
+
+export type DatabaseTableSnapshot = {
+  name: string
+  exists: boolean
+  rowCount: number
+  columns: string[]
+  rows: Record<string, string | number | boolean | null>[]
+}
+
+export type DatabaseStatus = {
+  configured: boolean
+  connected: boolean
+  error: string | null
+  host: string | null
+  database: string | null
+  postgresVersion: string | null
+  checkedAt: string
+  tables: DatabaseTableSnapshot[]
+}
+
+function serializeCell(value: unknown): string | number | boolean | null {
+  if (value === null || value === undefined) return null
+  if (value instanceof Date) return value.toISOString()
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return value
+  }
+  return JSON.stringify(value)
+}
+
+function serializeRows(
+  rows: Record<string, unknown>[],
+): Record<string, string | number | boolean | null>[] {
+  return rows.map((row) => {
+    const out: Record<string, string | number | boolean | null> = {}
+    for (const [key, value] of Object.entries(row)) {
+      out[key] = serializeCell(value)
+    }
+    return out
+  })
+}
+
+export async function getDatabaseStatus(): Promise<DatabaseStatus> {
+  const checkedAt = new Date().toISOString()
+  const connectionString = process.env.DATABASE_URL
+
+  let host: string | null = null
+  let database: string | null = null
+  if (connectionString) {
+    try {
+      const parsed = new URL(connectionString)
+      host = parsed.hostname
+      database = parsed.pathname.replace(/^\//, "") || null
+    } catch {
+      host = "(invalid DATABASE_URL)"
+    }
+  }
+
+  if (!isDbConfigured() || !db) {
+    return {
+      configured: false,
+      connected: false,
+      error: "DATABASE_URL is not set",
+      host,
+      database,
+      postgresVersion: null,
+      checkedAt,
+      tables: [],
+    }
+  }
+
+  try {
+    const versionResult = await db.execute(sql`select version() as version`)
+    const versionRow = versionResult.rows[0] as { version?: string } | undefined
+    const postgresVersion = versionRow?.version ?? null
+
+    const existing = await db.execute(sql`
+      select table_name
+      from information_schema.tables
+      where table_schema = 'public'
+        and table_name in ('mentor_profiles', 'mentee_preferences', 'mentor_assignments')
+    `)
+    const existingNames = new Set(
+      existing.rows.map((row) => String((row as { table_name: string }).table_name)),
+    )
+
+    const emptyColumns: Record<string, string[]> = {
+      mentor_profiles: [
+        "id",
+        "capacity",
+        "createdAt",
+        "pronouns",
+        "yearOfStudy",
+        "programOfStudy",
+        "mentorDescription",
+        "linkedinUrl",
+        "fullName",
+        "email",
+      ],
+      mentee_preferences: [
+        "id",
+        "firstChoice",
+        "secondChoice",
+        "thirdChoice",
+        "submittedAt",
+        "email",
+        "studentId",
+        "firstName",
+        "lastName",
+        "program",
+        "major",
+        "year",
+      ],
+      mentor_assignments: [
+        "id",
+        "mentorId",
+        "menteeId",
+        "assignedBy",
+        "assignedAt",
+      ],
+    }
+
+    const tableDefs = [
+      { name: "mentor_profiles", query: db.select().from(mentorProfiles) },
+      { name: "mentee_preferences", query: db.select().from(menteePreferences) },
+      { name: "mentor_assignments", query: db.select().from(mentorAssignments) },
+    ] as const
+
+    const tables: DatabaseTableSnapshot[] = []
+    for (const table of tableDefs) {
+      const exists = existingNames.has(table.name)
+      if (!exists) {
+        tables.push({
+          name: table.name,
+          exists: false,
+          rowCount: 0,
+          columns: [],
+          rows: [],
+        })
+        continue
+      }
+
+      const rawRows = (await table.query) as Record<string, unknown>[]
+      const columns =
+        rawRows.length > 0 ? Object.keys(rawRows[0]) : emptyColumns[table.name] ?? []
+      tables.push({
+        name: table.name,
+        exists: true,
+        rowCount: rawRows.length,
+        columns,
+        rows: serializeRows(rawRows),
+      })
+    }
+
+    return {
+      configured: true,
+      connected: true,
+      error: null,
+      host,
+      database,
+      postgresVersion,
+      checkedAt,
+      tables,
+    }
+  } catch (error) {
+    console.error("Error checking database status:", error)
+    return {
+      configured: true,
+      connected: false,
+      error: error instanceof Error ? error.message : String(error),
+      host,
+      database,
+      postgresVersion: null,
+      checkedAt,
+      tables: [],
     }
   }
 }
