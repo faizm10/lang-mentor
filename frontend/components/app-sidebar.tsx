@@ -30,6 +30,7 @@ const data = {
         { title: "Mentors", url: "/dashboard/mentors" },
         { title: "Add Mentor", url: "/dashboard/add-mentor" },
         { title: "Assignments", url: "/dashboard/assignments" },
+        { title: "Database", url: "/dashboard/database" },
       ],
     },
   ],
