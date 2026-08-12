@@ -317,6 +317,48 @@ export async function createMentorProfile(payload: CreateMentorProfileInput) {
   }
 }
 
+export async function createMentorProfilesBulk(
+  payloads: CreateMentorProfileInput[],
+) {
+  if (payloads.length === 0) {
+    return { count: 0, error: null, preview: false as const }
+  }
+
+  if (!isDbConfigured() || !db) {
+    console.warn(
+      "[db] Missing DATABASE_URL. Simulating bulk mentor_profiles insert.",
+    )
+    return { count: 0, error: null, preview: true as const }
+  }
+
+  try {
+    const rows = await db
+      .insert(mentorProfiles)
+      .values(
+        payloads.map((payload) => ({
+          fullName: payload.full_name,
+          email: payload.email,
+          pronouns: payload.pronouns,
+          yearOfStudy: payload.year_of_study,
+          programOfStudy: payload.program_of_study,
+          mentorDescription: payload.mentor_description,
+          linkedinUrl: payload.linkedin_url,
+          capacity: payload.capacity,
+        })),
+      )
+      .returning({ id: mentorProfiles.id })
+
+    return { count: rows.length, error: null, preview: false as const }
+  } catch (error) {
+    console.error("Error creating mentor profiles in bulk:", error)
+    return {
+      count: 0,
+      error: error instanceof Error ? error : new Error(String(error)),
+      preview: false as const,
+    }
+  }
+}
+
 export type DatabaseTableSnapshot = {
   name: string
   exists: boolean

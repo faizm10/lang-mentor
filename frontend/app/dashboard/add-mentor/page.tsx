@@ -14,6 +14,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import MentorCsvImport from "@/components/mentor-csv-import";
 import { createMentorProfile } from "@/lib/db/actions";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
@@ -143,22 +145,29 @@ export default function AddMentorPage() {
 
   return (
     <div className="page-container">
-      <div className="mx-auto w-full max-w-2xl space-y-6">
+      <div className="mx-auto w-full max-w-3xl space-y-6">
         <div>
           <h2 className="text-xl font-bold tracking-tight sm:text-2xl">
-            Add a new mentor
+            Add mentors
           </h2>
           <p className="prose-readable mt-1">
-            Create a mentor profile for the mentorship program.
+            Create a single mentor profile, or import a whole cohort from a CSV.
           </p>
         </div>
 
-        <Card>
-          <CardHeader className="sr-only">
-            <CardTitle>Mentor details</CardTitle>
-          </CardHeader>
+        <Tabs defaultValue="single" className="gap-4">
+          <TabsList className="grid w-full grid-cols-2 sm:inline-flex sm:w-auto">
+            <TabsTrigger value="single">Single mentor</TabsTrigger>
+            <TabsTrigger value="csv">Upload CSV</TabsTrigger>
+          </TabsList>
 
-          <CardContent>
+          <TabsContent value="single">
+            <Card>
+              <CardHeader className="sr-only">
+                <CardTitle>Mentor details</CardTitle>
+              </CardHeader>
+
+              <CardContent>
             <form onSubmit={handleSubmit} className="space-y-8" noValidate>
               <Fieldset title="Contact">
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -337,9 +346,22 @@ export default function AddMentorPage() {
                   )}
                 </Button>
               </div>
-            </form>
-          </CardContent>
-        </Card>
+                </form>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="csv">
+            <Card>
+              <CardHeader className="sr-only">
+                <CardTitle>Import mentors from CSV</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <MentorCsvImport />
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );
