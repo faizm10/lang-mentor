@@ -1,6 +1,6 @@
 "use server"
 
-import { asc, desc, inArray, sql } from "drizzle-orm"
+import { asc, desc, eq, inArray, sql } from "drizzle-orm"
 
 import { db, isDbConfigured } from "./index"
 import {
@@ -19,6 +19,7 @@ export type MentorProfileRow = {
   linkedin_url: string | null
   full_name: string
   email: string
+  capacity?: number | null
   user_id?: string | null
 }
 
@@ -45,6 +46,7 @@ export async function fetchMentorProfiles(): Promise<MentorProfileRow[] | null> 
         linkedinUrl: mentorProfiles.linkedinUrl,
         fullName: mentorProfiles.fullName,
         email: mentorProfiles.email,
+        capacity: mentorProfiles.capacity,
       })
       .from(mentorProfiles)
       .orderBy(asc(mentorProfiles.fullName))
@@ -59,6 +61,7 @@ export async function fetchMentorProfiles(): Promise<MentorProfileRow[] | null> 
       linkedin_url: row.linkedinUrl,
       full_name: row.fullName,
       email: row.email,
+      capacity: row.capacity,
       user_id: null,
     }))
   } catch (error) {
@@ -96,9 +99,9 @@ export type MenteePreferencesInsert = {
   program: string
   major: string
   year: string
-  first_choice: string
-  second_choice: string
-  third_choice: string
+  first_choice: string | null
+  second_choice: string | null
+  third_choice: string | null
 }
 
 export async function submitMenteePreferences(payload: MenteePreferencesInsert) {
@@ -118,9 +121,9 @@ export async function submitMenteePreferences(payload: MenteePreferencesInsert) 
         program: payload.program,
         major: payload.major,
         year: payload.year,
-        firstChoice: payload.first_choice,
-        secondChoice: payload.second_choice,
-        thirdChoice: payload.third_choice,
+        firstChoice: payload.first_choice || null,
+        secondChoice: payload.second_choice || null,
+        thirdChoice: payload.third_choice || null,
       })
       .returning({ id: menteePreferences.id })
 
@@ -309,6 +312,184 @@ export async function createMentorProfile(payload: CreateMentorProfileInput) {
     return { data: row, error: null, preview: false as const }
   } catch (error) {
     console.error("Error creating mentor profile:", error)
+    return {
+      data: null,
+      error: error instanceof Error ? error : new Error(String(error)),
+      preview: false as const,
+    }
+  }
+}
+
+export async function updateMentorProfile(
+  id: string,
+  payload: CreateMentorProfileInput,
+) {
+  if (!isDbConfigured() || !db) {
+    console.warn("[db] Missing DATABASE_URL. Simulating mentor_profiles update.")
+    return { data: null, error: null, preview: true as const }
+  }
+
+  try {
+    const [row] = await db
+      .update(mentorProfiles)
+      .set({
+        fullName: payload.full_name,
+        email: payload.email,
+        pronouns: payload.pronouns,
+        yearOfStudy: payload.year_of_study,
+        programOfStudy: payload.program_of_study,
+        mentorDescription: payload.mentor_description,
+        linkedinUrl: payload.linkedin_url,
+        capacity: payload.capacity,
+      })
+      .where(eq(mentorProfiles.id, id))
+      .returning({ id: mentorProfiles.id })
+
+    if (!row) {
+      return {
+        data: null,
+        error: new Error("Mentor not found"),
+        preview: false as const,
+      }
+    }
+
+    return { data: row, error: null, preview: false as const }
+  } catch (error) {
+    console.error("Error updating mentor profile:", error)
+    return {
+      data: null,
+      error: error instanceof Error ? error : new Error(String(error)),
+      preview: false as const,
+    }
+  }
+}
+
+export async function deleteMentorProfile(id: string) {
+  if (!isDbConfigured() || !db) {
+    console.warn("[db] Missing DATABASE_URL. Simulating mentor_profiles delete.")
+    return { data: null, error: null, preview: true as const }
+  }
+
+  try {
+    await db
+      .update(mentorAssignments)
+      .set({ mentorId: null })
+      .where(eq(mentorAssignments.mentorId, id))
+
+    const [row] = await db
+      .delete(mentorProfiles)
+      .where(eq(mentorProfiles.id, id))
+      .returning({ id: mentorProfiles.id })
+
+    if (!row) {
+      return {
+        data: null,
+        error: new Error("Mentor not found"),
+        preview: false as const,
+      }
+    }
+
+    return { data: row, error: null, preview: false as const }
+  } catch (error) {
+    console.error("Error deleting mentor profile:", error)
+    return {
+      data: null,
+      error: error instanceof Error ? error : new Error(String(error)),
+      preview: false as const,
+    }
+  }
+}
+
+export type UpdateMenteePreferencesInput = {
+  first_name: string
+  last_name: string
+  student_id: number
+  email: string
+  program: string
+  major: string
+  year: string
+  first_choice: string | null
+  second_choice: string | null
+  third_choice: string | null
+}
+
+export async function updateMenteePreferences(
+  id: string,
+  payload: UpdateMenteePreferencesInput,
+) {
+  if (!isDbConfigured() || !db) {
+    console.warn(
+      "[db] Missing DATABASE_URL. Simulating mentee_preferences update.",
+    )
+    return { data: null, error: null, preview: true as const }
+  }
+
+  try {
+    const [row] = await db
+      .update(menteePreferences)
+      .set({
+        firstName: payload.first_name,
+        lastName: payload.last_name,
+        studentId: payload.student_id,
+        email: payload.email,
+        program: payload.program,
+        major: payload.major,
+        year: payload.year,
+        firstChoice: payload.first_choice,
+        secondChoice: payload.second_choice,
+        thirdChoice: payload.third_choice,
+      })
+      .where(eq(menteePreferences.id, id))
+      .returning({ id: menteePreferences.id })
+
+    if (!row) {
+      return {
+        data: null,
+        error: new Error("Mentee not found"),
+        preview: false as const,
+      }
+    }
+
+    return { data: row, error: null, preview: false as const }
+  } catch (error) {
+    console.error("Error updating mentee preferences:", error)
+    return {
+      data: null,
+      error: error instanceof Error ? error : new Error(String(error)),
+      preview: false as const,
+    }
+  }
+}
+
+export async function deleteMenteePreferences(id: string) {
+  if (!isDbConfigured() || !db) {
+    console.warn(
+      "[db] Missing DATABASE_URL. Simulating mentee_preferences delete.",
+    )
+    return { data: null, error: null, preview: true as const }
+  }
+
+  try {
+    await db
+      .delete(mentorAssignments)
+      .where(eq(mentorAssignments.menteeId, id))
+
+    const [row] = await db
+      .delete(menteePreferences)
+      .where(eq(menteePreferences.id, id))
+      .returning({ id: menteePreferences.id })
+
+    if (!row) {
+      return {
+        data: null,
+        error: new Error("Mentee not found"),
+        preview: false as const,
+      }
+    }
+
+    return { data: row, error: null, preview: false as const }
+  } catch (error) {
+    console.error("Error deleting mentee preferences:", error)
     return {
       data: null,
       error: error instanceof Error ? error : new Error(String(error)),

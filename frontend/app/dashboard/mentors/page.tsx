@@ -1,20 +1,89 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { fetchMentorProfiles, type MentorProfileRow } from "@/lib/db/actions";
+import {
+  createMentorProfile,
+  deleteMentorProfile,
+  fetchMentorProfiles,
+  updateMentorProfile,
+  type CreateMentorProfileInput,
+  type MentorProfileRow,
+} from "@/lib/db/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Field } from "@/components/form-field";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { AlertCircle, ExternalLink, Search, Users } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  AlertCircle,
+  ExternalLink,
+  Loader2,
+  Pencil,
+  Plus,
+  Search,
+  Trash2,
+  Users,
+} from "lucide-react";
+import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+
+const PRONOUNS_OPTIONS = [
+  "he/him",
+  "she/her",
+  "they/them",
+  "other",
+  "prefer not to say",
+];
+
+type MentorFormState = {
+  full_name: string;
+  email: string;
+  pronouns: string;
+  year_of_study: string;
+  program_of_study: string;
+  mentor_description: string;
+  linkedin_url: string;
+  capacity: string;
+};
+
+const emptyForm: MentorFormState = {
+  full_name: "",
+  email: "",
+  pronouns: "",
+  year_of_study: "",
+  program_of_study: "",
+  mentor_description: "",
+  linkedin_url: "",
+  capacity: "3",
+};
 
 function initialsOf(name: string) {
   return (
@@ -26,6 +95,61 @@ function initialsOf(name: string) {
       .slice(0, 2)
       .toUpperCase() || "?"
   );
+}
+
+function mentorToForm(m: MentorProfileRow): MentorFormState {
+  return {
+    full_name: m.full_name ?? "",
+    email: m.email ?? "",
+    pronouns: m.pronouns ?? "",
+    year_of_study: m.year_of_study ?? "",
+    program_of_study: m.program_of_study ?? "",
+    mentor_description: m.mentor_description ?? "",
+    linkedin_url: m.linkedin_url ?? "",
+    capacity: String(m.capacity ?? 3),
+  };
+}
+
+function validateMentorForm(form: MentorFormState): Record<string, string> {
+  const errors: Record<string, string> = {};
+  if (!form.full_name.trim() || form.full_name.trim().length < 2) {
+    errors.full_name = "Full name is required";
+  }
+  if (!form.email.trim()) {
+    errors.email = "Email is required";
+  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
+    errors.email = "Enter a valid email";
+  }
+  if (!form.year_of_study.trim()) {
+    errors.year_of_study = "Year of study is required";
+  }
+  if (!form.program_of_study.trim()) {
+    errors.program_of_study = "Program of study is required";
+  }
+  if (!form.mentor_description.trim() || form.mentor_description.trim().length < 10) {
+    errors.mentor_description = "Description must be at least 10 characters";
+  }
+  if (form.linkedin_url && !form.linkedin_url.includes("linkedin.com")) {
+    errors.linkedin_url = "Enter a valid LinkedIn URL";
+  }
+  const capacity = Number(form.capacity);
+  if (!Number.isFinite(capacity) || capacity < 1) {
+    errors.capacity = "Capacity must be at least 1";
+  }
+  return errors;
+}
+
+function toPayload(form: MentorFormState): CreateMentorProfileInput {
+  return {
+    full_name: form.full_name.trim(),
+    email: form.email.trim(),
+    pronouns: form.pronouns || null,
+    year_of_study: form.year_of_study.trim(),
+    program_of_study: form.program_of_study.trim(),
+    mentor_description: form.mentor_description.trim(),
+    linkedin_url: form.linkedin_url.trim() || null,
+    capacity: Number(form.capacity) || 3,
+  };
 }
 
 function MentorCardSkeleton() {
@@ -52,27 +176,31 @@ export default function MentorsPage() {
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<MentorProfileRow | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState<MentorProfileRow | null>(null);
+  const [form, setForm] = useState<MentorFormState>(emptyForm);
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<MentorProfileRow | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await fetchMentorProfiles();
+      setMentors(data ?? []);
+    } catch (e) {
+      console.error(e);
+      setError("Failed to load mentors.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      try {
-        setLoading(true);
-        setError(null);
-        const data = await fetchMentorProfiles();
-        if (!cancelled) setMentors(data ?? []);
-      } catch (e) {
-        console.error(e);
-        if (!cancelled) setError("Failed to load mentors.");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    void load();
+  }, [load]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -84,15 +212,88 @@ export default function MentorsPage() {
     );
   }, [mentors, query]);
 
+  const openCreate = () => {
+    setEditing(null);
+    setForm(emptyForm);
+    setFormErrors({});
+    setFormOpen(true);
+  };
+
+  const openEdit = (mentor: MentorProfileRow) => {
+    setEditing(mentor);
+    setForm(mentorToForm(mentor));
+    setFormErrors({});
+    setSelected(null);
+    setFormOpen(true);
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const errors = validateMentorForm(form);
+    setFormErrors(errors);
+    if (Object.keys(errors).length > 0) {
+      toast.error("Please fix the errors in the form");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const payload = toPayload(form);
+      const result = editing
+        ? await updateMentorProfile(editing.id, payload)
+        : await createMentorProfile(payload);
+
+      if (result.error) {
+        toast.error(result.error.message);
+        return;
+      }
+
+      toast.success(editing ? "Mentor updated" : "Mentor added");
+      setFormOpen(false);
+      await load();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      const result = await deleteMentorProfile(deleteTarget.id);
+      if (result.error) {
+        toast.error(result.error.message);
+        return;
+      }
+      toast.success("Mentor deleted");
+      setDeleteTarget(null);
+      setSelected(null);
+      await load();
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <div className="page-container space-y-6">
-      <div>
-        <h2 className="text-xl font-bold tracking-tight sm:text-2xl">
-          Mentors
-        </h2>
-        <p className="prose-readable mt-1">
-          Everyone currently available in the Mentor Bank.
-        </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="text-xl font-bold tracking-tight sm:text-2xl">
+            Mentors
+          </h2>
+          <p className="prose-readable mt-1">
+            Everyone currently available in the Mentor Bank.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" asChild>
+            <Link href="/dashboard/add-mentor">CSV / full form</Link>
+          </Button>
+          <Button onClick={openCreate}>
+            <Plus className="size-4" aria-hidden="true" />
+            Add mentor
+          </Button>
+        </div>
       </div>
 
       {error ? (
@@ -152,6 +353,12 @@ export default function MentorsPage() {
                 ? "Add a mentor to get started."
                 : "Try a different search term."}
             </p>
+            {mentors.length === 0 ? (
+              <Button className="mt-4" onClick={openCreate}>
+                <Plus className="size-4" aria-hidden="true" />
+                Add mentor
+              </Button>
+            ) : null}
           </CardContent>
         </Card>
       ) : (
@@ -204,20 +411,38 @@ export default function MentorsPage() {
                   </p>
                 ) : null}
 
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setSelected(m)}
-                >
-                  View details
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSelected(m)}
+                  >
+                    View details
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => openEdit(m)}
+                  >
+                    <Pencil className="size-3.5" aria-hidden="true" />
+                    Edit
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-destructive hover:text-destructive"
+                    onClick={() => setDeleteTarget(m)}
+                  >
+                    <Trash2 className="size-3.5" aria-hidden="true" />
+                    Delete
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           ))}
         </div>
       )}
 
-      {/* Readable detail view — replaces the raw JSON dump */}
       <Dialog
         open={selected !== null}
         onOpenChange={(open) => !open && setSelected(null)}
@@ -275,15 +500,238 @@ export default function MentorsPage() {
                 </Button>
               ) : null}
 
-              {selected.created_at ? (
-                <p className="text-sm text-muted-foreground">
-                  Added {new Date(selected.created_at).toLocaleString()}
-                </p>
-              ) : null}
+              <DialogFooter className="gap-2 sm:justify-start">
+                <Button variant="outline" onClick={() => openEdit(selected)}>
+                  <Pencil className="size-4" aria-hidden="true" />
+                  Edit
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => {
+                    setDeleteTarget(selected);
+                  }}
+                >
+                  <Trash2 className="size-4" aria-hidden="true" />
+                  Delete
+                </Button>
+              </DialogFooter>
             </div>
           ) : null}
         </DialogContent>
       </Dialog>
+
+      <Dialog open={formOpen} onOpenChange={setFormOpen}>
+        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{editing ? "Edit mentor" : "Add mentor"}</DialogTitle>
+            <DialogDescription>
+              {editing
+                ? "Update this mentor’s profile."
+                : "Create a new mentor profile."}
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleSave} className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field id="mentor-full-name" label="Full name" required error={formErrors.full_name}>
+                <Input
+                  id="mentor-full-name"
+                  value={form.full_name}
+                  onChange={(e) =>
+                    setForm((prev) => ({ ...prev, full_name: e.target.value }))
+                  }
+                  className={cn(formErrors.full_name && "border-destructive")}
+                />
+              </Field>
+              <Field id="mentor-email" label="Email" required error={formErrors.email}>
+                <Input
+                  id="mentor-email"
+                  type="email"
+                  value={form.email}
+                  onChange={(e) =>
+                    setForm((prev) => ({ ...prev, email: e.target.value }))
+                  }
+                  className={cn(formErrors.email && "border-destructive")}
+                />
+              </Field>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field id="mentor-pronouns" label="Pronouns">
+                <Select
+                  value={form.pronouns || undefined}
+                  onValueChange={(value) =>
+                    setForm((prev) => ({ ...prev, pronouns: value }))
+                  }
+                >
+                  <SelectTrigger id="mentor-pronouns">
+                    <SelectValue placeholder="Select pronouns" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PRONOUNS_OPTIONS.map((option) => (
+                      <SelectItem key={option} value={option}>
+                        {option}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field
+                id="mentor-year"
+                label="Year of study"
+                required
+                error={formErrors.year_of_study}
+              >
+                <Input
+                  id="mentor-year"
+                  value={form.year_of_study}
+                  onChange={(e) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      year_of_study: e.target.value,
+                    }))
+                  }
+                  className={cn(formErrors.year_of_study && "border-destructive")}
+                />
+              </Field>
+            </div>
+
+            <Field
+              id="mentor-program"
+              label="Program of study"
+              required
+              error={formErrors.program_of_study}
+            >
+              <Input
+                id="mentor-program"
+                value={form.program_of_study}
+                onChange={(e) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    program_of_study: e.target.value,
+                  }))
+                }
+                className={cn(
+                  formErrors.program_of_study && "border-destructive",
+                )}
+              />
+            </Field>
+
+            <Field
+              id="mentor-description"
+              label="Description"
+              required
+              error={formErrors.mentor_description}
+            >
+              <Textarea
+                id="mentor-description"
+                rows={4}
+                value={form.mentor_description}
+                onChange={(e) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    mentor_description: e.target.value,
+                  }))
+                }
+                className={cn(
+                  formErrors.mentor_description && "border-destructive",
+                )}
+              />
+            </Field>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field
+                id="mentor-linkedin"
+                label="LinkedIn URL"
+                error={formErrors.linkedin_url}
+              >
+                <Input
+                  id="mentor-linkedin"
+                  value={form.linkedin_url}
+                  onChange={(e) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      linkedin_url: e.target.value,
+                    }))
+                  }
+                  className={cn(formErrors.linkedin_url && "border-destructive")}
+                />
+              </Field>
+              <Field
+                id="mentor-capacity"
+                label="Capacity"
+                required
+                error={formErrors.capacity}
+              >
+                <Input
+                  id="mentor-capacity"
+                  type="number"
+                  min={1}
+                  value={form.capacity}
+                  onChange={(e) =>
+                    setForm((prev) => ({ ...prev, capacity: e.target.value }))
+                  }
+                  className={cn(formErrors.capacity && "border-destructive")}
+                />
+              </Field>
+            </div>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setFormOpen(false)}
+                disabled={saving}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={saving}>
+                {saving ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                    Saving…
+                  </>
+                ) : editing ? (
+                  "Save changes"
+                ) : (
+                  "Add mentor"
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete mentor?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove{" "}
+              <span className="font-medium text-foreground">
+                {deleteTarget?.full_name}
+              </span>
+              . Assignments linked to this mentor will keep the mentee but clear
+              the mentor.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                void handleDelete();
+              }}
+              disabled={deleting}
+              className="bg-destructive text-white hover:bg-destructive/90"
+            >
+              {deleting ? "Deleting…" : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

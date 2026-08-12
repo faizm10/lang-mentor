@@ -9,6 +9,7 @@ import {
   GraduationCap,
   Link2,
   UserPlus,
+  UserRound,
   Users,
   Workflow,
 } from "lucide-react";
@@ -31,6 +32,7 @@ import {
 const NAV_ITEMS = [
   { title: "Matching", url: "/dashboard", icon: Workflow },
   { title: "Mentors", url: "/dashboard/mentors", icon: Users },
+  { title: "Mentees", url: "/dashboard/mentees", icon: UserRound },
   { title: "Add mentor", url: "/dashboard/add-mentor", icon: UserPlus },
   { title: "Assignments", url: "/dashboard/assignments", icon: Link2 },
   { title: "Database", url: "/dashboard/database", icon: Database },
