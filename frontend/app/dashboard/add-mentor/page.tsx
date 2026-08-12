@@ -4,8 +4,8 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Field, Fieldset } from "@/components/form-field";
 import {
   Select,
   SelectContent,
@@ -14,18 +14,20 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import MentorCsvImport from "@/components/mentor-csv-import";
 import { createMentorProfile } from "@/lib/db/actions";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-
-
+import { cn } from "@/lib/utils";
+import { Info, Loader2 } from "lucide-react";
 
 const PRONOUNS_OPTIONS = [
   "he/him",
   "she/her",
   "they/them",
   "other",
-  "prefer not to say"
+  "prefer not to say",
 ];
 
 export default function AddMentorPage() {
@@ -38,7 +40,7 @@ export default function AddMentorPage() {
     program_of_study: "",
     mentor_description: "",
     linkedin_url: "",
-    capacity: 3
+    capacity: 3,
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -46,39 +48,37 @@ export default function AddMentorPage() {
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
 
-    // Full Name validation
     if (!formData.full_name.trim()) {
       newErrors.full_name = "Full name is required";
     } else if (formData.full_name.trim().length < 2) {
       newErrors.full_name = "Full name must be at least 2 characters";
     }
 
-    // Email validation
     if (!formData.email.trim()) {
       newErrors.email = "Email is required";
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       newErrors.email = "Please enter a valid email address";
     }
 
-    // Year of Study validation
     if (!formData.year_of_study) {
       newErrors.year_of_study = "Year of study is required";
     }
 
-    // Program validation
     if (!formData.program_of_study) {
       newErrors.program_of_study = "Program of study is required";
     }
 
-    // Mentor Description validation
     if (!formData.mentor_description.trim()) {
       newErrors.mentor_description = "Mentor description is required";
     } else if (formData.mentor_description.trim().length < 10) {
-      newErrors.mentor_description = "Description must be at least 10 characters";
+      newErrors.mentor_description =
+        "Description must be at least 10 characters";
     }
 
-    // LinkedIn URL validation (optional but if provided, should be valid)
-    if (formData.linkedin_url && !formData.linkedin_url.includes("linkedin.com")) {
+    if (
+      formData.linkedin_url &&
+      !formData.linkedin_url.includes("linkedin.com")
+    ) {
       newErrors.linkedin_url = "Please enter a valid LinkedIn URL";
     }
 
@@ -88,14 +88,14 @@ export default function AddMentorPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!validateForm()) {
       toast.error("Please fix the errors in the form");
       return;
     }
 
     setIsSubmitting(true);
-    
+
     try {
       const { error } = await createMentorProfile({
         full_name: formData.full_name.trim(),
@@ -125,75 +125,101 @@ export default function AddMentorPage() {
   };
 
   const handleInputChange = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    setFormData((prev) => ({ ...prev, [field]: value }));
     // Clear error when user starts typing
     if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: "" }));
+      setErrors((prev) => ({ ...prev, [field]: "" }));
     }
   };
 
-  return (
-    <div className="flex flex-col min-h-screen bg-gray-50 p-4 md:p-6 lg:p-8">
-      <div className="max-w-2xl mx-auto w-full">
-        <Card className="shadow-lg">
-          <CardHeader>
-            <CardTitle className="text-2xl font-bold text-gray-900">
-              Add New Mentor
-            </CardTitle>
-            <p className="text-gray-600">
-              Create a new mentor profile for the mentorship program.
-            </p>
-          </CardHeader>
-          
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Name and Email */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="full_name">
-                    Full Name *
-                  </Label>
-                  <Input
-                    id="full_name"
-                    value={formData.full_name}
-                    onChange={(e) => handleInputChange("full_name", e.target.value)}
-                    placeholder="Enter full name"
-                    className={errors.full_name ? "border-red-500" : ""}
-                  />
-                  {errors.full_name && (
-                    <p className="text-sm text-red-600">{errors.full_name}</p>
-                  )}
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="email">
-                    Email Address *
-                  </Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => handleInputChange("email", e.target.value)}
-                    placeholder="Enter email address"
-                    className={errors.email ? "border-red-500" : ""}
-                  />
-                  {errors.email && (
-                    <p className="text-sm text-red-600">{errors.email}</p>
-                  )}
-                </div>
-              </div>
+  /** Shared props that wire validation state to assistive tech. */
+  const fieldStatus = (field: string, hasHint = false) => ({
+    "aria-invalid": errors[field] ? true : undefined,
+    "aria-describedby": errors[field]
+      ? `${field}-error`
+      : hasHint
+        ? `${field}-hint`
+        : undefined,
+    className: cn(errors[field] && "border-destructive"),
+  });
 
-              {/* Pronouns and Year of Study */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="pronouns">
-                    Pronouns
-                  </Label>
+  return (
+    <div className="page-container">
+      <div className="mx-auto w-full max-w-3xl space-y-6">
+        <div>
+          <h2 className="text-xl font-bold tracking-tight sm:text-2xl">
+            Add mentors
+          </h2>
+          <p className="prose-readable mt-1">
+            Create a single mentor profile, or import a whole cohort from a CSV.
+          </p>
+        </div>
+
+        <Tabs defaultValue="single" className="gap-4">
+          <TabsList className="grid w-full grid-cols-2 sm:inline-flex sm:w-auto">
+            <TabsTrigger value="single">Single mentor</TabsTrigger>
+            <TabsTrigger value="csv">Upload CSV</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="single">
+            <Card>
+              <CardHeader className="sr-only">
+                <CardTitle>Mentor details</CardTitle>
+              </CardHeader>
+
+              <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-8" noValidate>
+              <Fieldset title="Contact">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <Field
+                    id="full_name"
+                    label="Full name"
+                    required
+                    error={errors.full_name}
+                  >
+                    <Input
+                      id="full_name"
+                      autoComplete="name"
+                      value={formData.full_name}
+                      onChange={(e) =>
+                        handleInputChange("full_name", e.target.value)
+                      }
+                      placeholder="Jordan Lee"
+                      {...fieldStatus("full_name")}
+                    />
+                  </Field>
+
+                  <Field
+                    id="email"
+                    label="Email address"
+                    required
+                    error={errors.email}
+                  >
+                    <Input
+                      id="email"
+                      type="email"
+                      inputMode="email"
+                      autoComplete="email"
+                      autoCapitalize="none"
+                      spellCheck={false}
+                      value={formData.email}
+                      onChange={(e) =>
+                        handleInputChange("email", e.target.value)
+                      }
+                      placeholder="jordan.lee@uoguelph.ca"
+                      {...fieldStatus("email")}
+                    />
+                  </Field>
+                </div>
+
+                <Field id="pronouns" label="Pronouns" error={errors.pronouns}>
                   <Select
                     value={formData.pronouns}
-                    onValueChange={(value) => handleInputChange("pronouns", value)}
+                    onValueChange={(value) =>
+                      handleInputChange("pronouns", value)
+                    }
                   >
-                    <SelectTrigger className={errors.pronouns ? "border-red-500" : ""}>
+                    <SelectTrigger id="pronouns" className="w-full">
                       <SelectValue placeholder="Select pronouns" />
                     </SelectTrigger>
                     <SelectContent>
@@ -204,121 +230,138 @@ export default function AddMentorPage() {
                       ))}
                     </SelectContent>
                   </Select>
-                  {errors.pronouns && (
-                    <p className="text-sm text-red-600">{errors.pronouns}</p>
-                  )}
-                </div>
+                </Field>
+              </Fieldset>
 
-                <div className="space-y-2">
-                  <Label htmlFor="year_of_study">
-                    Year of Study *
-                  </Label>
+              <Fieldset title="Studies">
+                <Field
+                  id="year_of_study"
+                  label="Year of study"
+                  required
+                  error={errors.year_of_study}
+                >
                   <Input
                     id="year_of_study"
                     value={formData.year_of_study}
-                    onChange={(e) => handleInputChange("year_of_study", e.target.value)}
-                    placeholder="e.g., Senior, Graduate Student, Alumni, etc."
-                    className={errors.year_of_study ? "border-red-500" : ""}
+                    onChange={(e) =>
+                      handleInputChange("year_of_study", e.target.value)
+                    }
+                    placeholder="e.g. Senior, Graduate Student, Alumni"
+                    {...fieldStatus("year_of_study")}
                   />
-                  {errors.year_of_study && (
-                    <p className="text-sm text-red-600">{errors.year_of_study}</p>
-                  )}
-                </div>
-              </div>
+                </Field>
 
-              {/* Program of Study */}
-              <div className="space-y-2">
-                <Label htmlFor="program_of_study">
-                  Program of Study *
-                </Label>
-                <Input
+                <Field
                   id="program_of_study"
-                  value={formData.program_of_study}
-                  onChange={(e) => handleInputChange("program_of_study", e.target.value)}
-                  placeholder="e.g., Computer Science, Business Administration, etc."
-                  className={errors.program_of_study ? "border-red-500" : ""}
-                />
-                {errors.program_of_study && (
-                  <p className="text-sm text-red-600">{errors.program_of_study}</p>
-                )}
-                <p className="text-sm text-gray-500">
-                  Enter your degree program or field of study.
-                </p>
-              </div>
+                  label="Program of study"
+                  required
+                  error={errors.program_of_study}
+                  hint="Degree program or field of study"
+                >
+                  <Input
+                    id="program_of_study"
+                    value={formData.program_of_study}
+                    onChange={(e) =>
+                      handleInputChange("program_of_study", e.target.value)
+                    }
+                    placeholder="e.g. Computer Science"
+                    {...fieldStatus("program_of_study", true)}
+                  />
+                </Field>
+              </Fieldset>
 
-              {/* Mentor Description */}
-              <div className="space-y-2">
-                <Label htmlFor="mentor_description">
-                  Mentor Description *
-                </Label>
-                <Textarea
+              <Fieldset title="Profile">
+                <Field
                   id="mentor_description"
-                  value={formData.mentor_description}
-                  onChange={(e) => handleInputChange("mentor_description", e.target.value)}
-                  placeholder="Describe your background, interests, and what you can offer as a mentor..."
-                  className={errors.mentor_description ? "border-red-500" : ""}
-                  rows={4}
-                />
-                {errors.mentor_description && (
-                  <p className="text-sm text-red-600">{errors.mentor_description}</p>
-                )}
-                <p className="text-sm text-gray-500">
-                  Tell mentees about your experience, interests, and how you can help them.
-                </p>
-              </div>
+                  label="Mentor description"
+                  required
+                  error={errors.mentor_description}
+                  hint="Mentees read this when choosing — cover experience, interests, and how you can help."
+                >
+                  <Textarea
+                    id="mentor_description"
+                    value={formData.mentor_description}
+                    onChange={(e) =>
+                      handleInputChange("mentor_description", e.target.value)
+                    }
+                    placeholder="Describe your background, interests, and what you can offer as a mentor…"
+                    rows={5}
+                    {...fieldStatus("mentor_description", true)}
+                  />
+                </Field>
 
-              {/* LinkedIn URL */}
-              <div className="space-y-2">
-                <Label htmlFor="linkedin_url">
-                  LinkedIn Profile URL
-                </Label>
-                <Input
+                <Field
                   id="linkedin_url"
-                  type="url"
-                  value={formData.linkedin_url}
-                  onChange={(e) => handleInputChange("linkedin_url", e.target.value)}
-                  placeholder="https://linkedin.com/in/yourprofile"
-                  className={errors.linkedin_url ? "border-red-500" : ""}
-                />
-                {errors.linkedin_url && (
-                  <p className="text-sm text-red-600">{errors.linkedin_url}</p>
-                )}
-                <p className="text-sm text-gray-500">
-                  Optional: Share your LinkedIn profile for mentees to connect with you.
-                </p>
-              </div>
+                  label="LinkedIn profile URL"
+                  error={errors.linkedin_url}
+                  hint="Optional — lets mentees connect with you."
+                >
+                  <Input
+                    id="linkedin_url"
+                    type="url"
+                    inputMode="url"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    value={formData.linkedin_url}
+                    onChange={(e) =>
+                      handleInputChange("linkedin_url", e.target.value)
+                    }
+                    placeholder="https://linkedin.com/in/yourprofile"
+                    {...fieldStatus("linkedin_url", true)}
+                  />
+                </Field>
+              </Fieldset>
 
-
-              {/* Info Alert */}
-              <Alert>
+              <Alert className="bg-muted/60">
+                <Info aria-hidden="true" />
                 <AlertDescription>
-                  <strong>Note:</strong> All fields marked with * are required. 
-                  Your mentor profile will be visible to mentees when they make their selections.
+                  Fields marked with * are required. This profile becomes
+                  visible to mentees when they make their selections.
                 </AlertDescription>
               </Alert>
 
-              {/* Submit Buttons */}
-              <div className="flex gap-4">
+              {/* Primary action first on mobile, conventional order on desktop */}
+              <div className="flex flex-col-reverse gap-3 sm:flex-row">
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => router.back()}
                   disabled={isSubmitting}
-                  className="flex-1"
+                  className="sm:flex-1"
                 >
                   Cancel
                 </Button>
                 <Button
                   type="submit"
                   disabled={isSubmitting}
-                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                  className="sm:flex-1"
                 >
-                  {isSubmitting ? "Creating..." : "Create Mentor Profile"}
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="animate-spin" aria-hidden="true" />
+                      Creating…
+                    </>
+                  ) : (
+                    "Create mentor profile"
+                  )}
                 </Button>
               </div>
-            </form>
-          </CardContent>
-        </Card>
+                </form>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="csv">
+            <Card>
+              <CardHeader className="sr-only">
+                <CardTitle>Import mentors from CSV</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <MentorCsvImport />
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );

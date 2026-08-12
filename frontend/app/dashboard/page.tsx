@@ -14,6 +14,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
   DialogContent,
@@ -22,6 +23,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  AlertCircle,
+  Handshake,
+  Loader2,
+  UserRound,
+  Users,
+} from "lucide-react";
+import { toast } from "sonner";
+import {
   fetchMenteePreferences,
   fetchMentorProfiles,
   fetchMentorNamesByIds,
@@ -29,6 +38,73 @@ import {
   type MentorProfileRow,
   saveMentorAssignments,
 } from "@/lib/db/actions";
+
+function StatCard({
+  label,
+  value,
+  icon: Icon,
+  loading,
+}: {
+  label: string;
+  value: number;
+  icon: React.ElementType;
+  loading?: boolean;
+}) {
+  return (
+    <Card className="py-4 sm:py-5">
+      <CardContent className="px-4 sm:px-5">
+        <div className="flex items-center gap-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-brand-subtle text-brand-subtle-foreground">
+            <Icon className="size-5" aria-hidden="true" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-sm text-muted-foreground">{label}</p>
+            {loading ? (
+              <Skeleton className="mt-1 h-7 w-10" />
+            ) : (
+              <p className="text-2xl leading-tight font-bold tabular-nums">
+                {value}
+              </p>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Bulleted name list used by the post-matching summary cards. */
+function NameList({
+  items,
+  emptyLabel,
+}: {
+  items: { id: string; label: string; onClick?: () => void }[];
+  emptyLabel: string;
+}) {
+  if (items.length === 0) {
+    return <p className="text-sm text-muted-foreground">{emptyLabel}</p>;
+  }
+
+  return (
+    <ul className="divide-y divide-border text-sm">
+      {items.map((item) => (
+        <li key={item.id} className="py-2 first:pt-0 last:pb-0">
+          {item.onClick ? (
+            <button
+              type="button"
+              onClick={item.onClick}
+              className="rounded text-left font-medium text-primary hover:underline"
+            >
+              {item.label}
+            </button>
+          ) : (
+            <span className="break-words">{item.label}</span>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 export default function Dashboard() {
   const [prefs, setPrefs] = useState<MenteePreferencesRow[]>([]);
@@ -40,7 +116,8 @@ export default function Dashboard() {
     { menteeId: string; mentorId: string | null }[]
   >([]);
   const [isSaving, setIsSaving] = useState(false);
-  const [selectedMentee, setSelectedMentee] = useState<MenteePreferencesRow | null>(null);
+  const [selectedMentee, setSelectedMentee] =
+    useState<MenteePreferencesRow | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   useEffect(() => {
@@ -53,10 +130,6 @@ export default function Dashboard() {
           fetchMenteePreferences(),
           fetchMentorProfiles(),
         ]);
-        console.debug("[dashboard] loaded", {
-          mentees: p?.length ?? 0,
-          mentors: m?.length ?? 0,
-        });
         // Ensure we have names for all mentor IDs referenced by mentee choices
         const choiceIds = new Set<string>();
         (p ?? []).forEach((row) => {
@@ -65,33 +138,30 @@ export default function Dashboard() {
           if (row.third_choice) choiceIds.add(row.third_choice);
         });
         const knownIds = new Set((m ?? []).map((mm) => mm.id));
-        const missingIds = Array.from(choiceIds).filter((id) => !knownIds.has(id));
-        console.debug("[dashboard] mapping", {
-          choiceIds: choiceIds.size,
-          knownMentorIds: knownIds.size,
-          missingIds: missingIds.length,
-          missingIdsList: missingIds,
-        });
+        const missingIds = Array.from(choiceIds).filter(
+          (id) => !knownIds.has(id),
+        );
         let backfill: { id: string; full_name: string }[] = [];
         if (missingIds.length > 0) {
           backfill = await fetchMentorNamesByIds(missingIds);
         }
-        console.debug("[dashboard] backfill results", { count: backfill.length, backfill });
         const mergedMentors: MentorProfileRow[] = [
           ...(m ?? []),
-          ...backfill.map((b) => ({
-            id: b.id,
-            created_at: null,
-            pronouns: null,
-            year_of_study: null,
-            program_of_study: null,
-            mentor_description: null,
-            linkedin_url: null,
-            full_name: b.full_name,
-            email: "",
-          } as MentorProfileRow)),
+          ...backfill.map(
+            (b) =>
+              ({
+                id: b.id,
+                created_at: null,
+                pronouns: null,
+                year_of_study: null,
+                program_of_study: null,
+                mentor_description: null,
+                linkedin_url: null,
+                full_name: b.full_name,
+                email: "",
+              }) as MentorProfileRow,
+          ),
         ];
-        console.debug("[dashboard] mergedMentors length", (mergedMentors ?? []).length);
         if (!cancelled) {
           setPrefs(p ?? []);
           setMentors(mergedMentors);
@@ -117,7 +187,6 @@ export default function Dashboard() {
       // Include that mapping when available to resolve names.
       if (m.user_id) entries.push([m.user_id, m.full_name]);
     }
-    console.debug("[dashboard] mentorNameMap size", entries.length);
     return new Map(entries);
   }, [mentors]);
 
@@ -125,9 +194,11 @@ export default function Dashboard() {
     return prefs.map((row) => ({
       id: row.id,
       name: `${row.first_name} ${row.last_name}`,
-      topChoices: [row.first_choice, row.second_choice, row.third_choice].filter(
-        Boolean,
-      ) as string[],
+      topChoices: [
+        row.first_choice,
+        row.second_choice,
+        row.third_choice,
+      ].filter(Boolean) as string[],
       menteeData: row, // Store the full mentee data for the dialog
     }));
   }, [prefs]);
@@ -216,16 +287,16 @@ export default function Dashboard() {
       const { error } = await saveMentorAssignments(payload);
       if (error) {
         console.error(error);
-        alert("Failed to save pairings. Please try again.");
+        toast.error("Failed to save pairings. Please try again.");
         return;
       }
-      alert("Pairings saved successfully.");
+      toast.success(`Saved ${valid.length} pairings.`);
     } finally {
       setIsSaving(false);
     }
   };
 
-  const handleMenteeClick = (mentee: typeof baseData[0]) => {
+  const handleMenteeClick = (mentee: (typeof baseData)[0]) => {
     setSelectedMentee(mentee.menteeData);
     setIsDialogOpen(true);
   };
@@ -235,336 +306,408 @@ export default function Dashboard() {
     setSelectedMentee(null);
   };
 
+  const matchedCount = matchingRun
+    ? matchingResults.filter((r) => r.mentorId).length
+    : 0;
+
   return (
-    <>
-    <div className="flex flex-col min-h-screen bg-gray-50 p-4 md:p-6 lg:p-8">
-      <div className="max-w-7xl mx-auto w-full">
-        <Card className="shadow-lg">
-          <CardHeader>
-            <CardTitle className="text-2xl font-bold text-gray-900">
-              Mentee Matching Dashboard
-            </CardTitle>
-            <p className="text-gray-600">View mentee choices from Supabase.</p>
-          </CardHeader>
-          <CardContent>
-            {loading && (
-              <p className="text-gray-500 text-sm mb-4">Loading submissions…</p>
-            )}
-            {error && (
-              <p className="text-red-600 text-sm mb-4">{error}</p>
-            )}
-            <div className="mb-6">
+    <div className="page-container space-y-6">
+      <div>
+        <h2 className="text-xl font-bold tracking-tight sm:text-2xl">
+          Mentee matching
+        </h2>
+        <p className="prose-readable mt-1">
+          Review mentee submissions, run the matching system, and save the
+          resulting pairings.
+        </p>
+      </div>
+
+      {error ? (
+        <Card className="border-destructive/40 bg-destructive/5 py-4">
+          <CardContent className="flex items-start gap-3 px-4">
+            <AlertCircle
+              className="mt-0.5 size-5 shrink-0 text-destructive"
+              aria-hidden="true"
+            />
+            <p className="text-sm text-destructive">{error}</p>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {/* Stats */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <StatCard
+          label="Total mentees"
+          value={baseData.length}
+          icon={UserRound}
+          loading={loading}
+        />
+        <StatCard
+          label="Total mentors"
+          value={mentors.length}
+          icon={Users}
+          loading={loading}
+        />
+        <StatCard
+          label="Matched pairs"
+          value={matchedCount}
+          icon={Handshake}
+          loading={loading}
+        />
+      </div>
+
+      {/* Actions */}
+      <Card className="py-4 sm:py-5">
+        <CardContent className="px-4 sm:px-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold">Matching system</p>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                {matchingRun
+                  ? "Matching complete — review the results below."
+                  : "Assigns each mentee their highest available choice."}
+              </p>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:shrink-0">
               <Button
                 onClick={handleRunMatching}
-                disabled={matchingRun || loading || !!error || baseData.length === 0}
-                className="bg-blue-600 hover:bg-blue-700 text-white"
+                disabled={
+                  matchingRun || loading || !!error || baseData.length === 0
+                }
               >
-                {matchingRun ? "Matching Run" : "Run Matching System"}
+                {matchingRun ? "Matching run" : "Run matching system"}
               </Button>
-              {matchingRun && (
-                <p className="text-sm text-gray-500 mt-2">
-                  Matching process completed. Review the results below.
-                </p>
-              )}
+              {matchingRun ? (
+                <>
+                  <Button
+                    variant="outline"
+                    onClick={handlePairRemaining}
+                    disabled={
+                      unmatchedMentees.length === 0 ||
+                      unassignedMentors.length === 0
+                    }
+                  >
+                    Pair remaining
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={handleSavePairings}
+                    disabled={
+                      isSaving || matchingResults.every((r) => !r.mentorId)
+                    }
+                  >
+                    {isSaving ? (
+                      <>
+                        <Loader2 className="animate-spin" aria-hidden="true" />
+                        Saving…
+                      </>
+                    ) : (
+                      "Save pairings"
+                    )}
+                  </Button>
+                </>
+              ) : null}
             </div>
+          </div>
+        </CardContent>
+      </Card>
 
-            {/* Mentee Registration Count */}
-            <div className="mb-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Card className="bg-blue-50 border-blue-200">
-                  <CardContent className="p-4">
-                    <div className="flex items-center space-x-3">
-                      <div className="h-10 w-10 bg-blue-100 rounded-full flex items-center justify-center">
-                        <svg className="h-5 w-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
-                        </svg>
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-blue-600">Total Mentees</p>
-                        <p className="text-2xl font-bold text-blue-900">{baseData.length}</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
+      {/* Submissions */}
+      <Card className="gap-0 overflow-hidden py-0">
+        <CardHeader className="border-b px-4 py-4 sm:px-5">
+          <CardTitle className="text-base font-semibold">
+            Mentee submissions
+          </CardTitle>
+          <p className="text-sm text-muted-foreground">
+            {loading
+              ? "Loading submissions…"
+              : `${displayData.length} submitted`}
+          </p>
+        </CardHeader>
 
-                <Card className="bg-green-50 border-green-200">
-                  <CardContent className="p-4">
-                    <div className="flex items-center space-x-3">
-                      <div className="h-10 w-10 bg-green-100 rounded-full flex items-center justify-center">
-                        <svg className="h-5 w-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                        </svg>
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-green-600">Total Mentors</p>
-                        <p className="text-2xl font-bold text-green-900">{mentors.length}</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="bg-purple-50 border-purple-200">
-                  <CardContent className="p-4">
-                    <div className="flex items-center space-x-3">
-                      <div className="h-10 w-10 bg-purple-100 rounded-full flex items-center justify-center">
-                        <svg className="h-5 w-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                        </svg>
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-purple-600">Matched Pairs</p>
-                        <p className="text-2xl font-bold text-purple-900">
-                          {matchingRun ? matchingResults.filter(r => r.mentorId).length : 0}
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
+        <CardContent className="p-0">
+          {loading ? (
+            <div className="space-y-3 p-4 sm:p-5">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
             </div>
-
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Mentee Name</TableHead>
-                  <TableHead>Top 3 Choices</TableHead>
-                  <TableHead>Matched Mentor</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+          ) : displayData.length === 0 ? (
+            <p className="p-6 text-center text-sm text-muted-foreground">
+              No mentee submissions yet.
+            </p>
+          ) : (
+            <>
+              {/* Mobile: stacked cards — tables are unreadable at this width */}
+              <ul className="divide-y divide-border md:hidden">
                 {displayData.map((mentee) => (
-                  <TableRow key={mentee.id}>
-                    <TableCell className="font-medium">
+                  <li key={mentee.id} className="space-y-3 p-4">
+                    <div className="flex items-start justify-between gap-3">
                       <button
+                        type="button"
                         onClick={() => handleMenteeClick(mentee)}
-                        className="text-blue-600 hover:text-blue-800 hover:underline cursor-pointer transition-colors"
+                        className="rounded text-left text-sm font-semibold text-primary hover:underline"
                       >
                         {mentee.name}
                       </button>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
+                      <Badge
+                        variant="secondary"
+                        className={cn(
+                          "shrink-0",
+                          mentee.status === "Matched"
+                            ? "bg-brand-subtle text-brand-subtle-foreground"
+                            : "bg-muted text-muted-foreground",
+                        )}
+                      >
+                        {mentee.status}
+                      </Badge>
+                    </div>
+
+                    <div className="space-y-1.5 text-sm">
+                      <p className="text-muted-foreground">Top 3 choices</p>
+                      <div className="flex flex-wrap gap-1.5">
                         {mentee.topChoices.map((choiceId) => (
                           <Badge
                             key={choiceId}
                             variant="secondary"
-                            className="bg-gray-100 text-gray-700"
+                            className="font-normal"
                           >
                             {mentorNameMap.get(choiceId) || "Unknown"}
                           </Badge>
                         ))}
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      {mentee.matchedMentorName ? (
-                        <span className="font-semibold text-emerald-600">
-                          {mentee.matchedMentorName}
-                        </span>
-                      ) : (
-                        <span className="text-gray-500">N/A</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
+                    </div>
+
+                    <div className="flex items-baseline justify-between gap-3 text-sm">
+                      <span className="text-muted-foreground">Matched with</span>
+                      <span
                         className={cn(
-                          mentee.status === "Matched"
-                            ? "bg-emerald-100 text-emerald-700"
-                            : "bg-red-100 text-red-700",
+                          "text-right font-medium",
+                          mentee.matchedMentorName
+                            ? "text-foreground"
+                            : "text-muted-foreground",
                         )}
                       >
-                        {mentee.status}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
+                        {mentee.matchedMentorName ?? "—"}
+                      </span>
+                    </div>
+                  </li>
                 ))}
-              </TableBody>
-            </Table>
-            {matchingRun && (
-              <div className="mt-8">
-                <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <Button
-                    onClick={handlePairRemaining}
-                    disabled={unmatchedMentees.length === 0 || unassignedMentors.length === 0}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                  >
-                    Pair Remaining Unmatched
-                  </Button>
-                  <Button
-                    onClick={handleSavePairings}
-                    disabled={isSaving || !matchingRun || matchingResults.every((r) => !r.mentorId)}
-                    className="bg-gray-900 hover:bg-black text-white"
-                  >
-                    {isSaving ? "Saving…" : "Save Pairings"}
-                  </Button>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <Card className="shadow-sm">
-                  <CardHeader>
-                    <CardTitle className="text-lg font-semibold text-gray-900">
-                      Unmatched Mentees
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {unmatchedMentees.length > 0 ? (
-                      <ul className="list-disc pl-5 space-y-1 text-gray-700">
-                        {unmatchedMentees.map((mentee) => (
-                          <li key={mentee.id}>
-                            <button
-                              onClick={() => handleMenteeClick(mentee)}
-                              className="text-blue-600 hover:text-blue-800 hover:underline cursor-pointer transition-colors"
-                            >
-                              {mentee.name}
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="text-gray-500">All mentees have been matched!</p>
-                    )}
-                  </CardContent>
-                </Card>
+              </ul>
 
-                <Card className="shadow-sm">
-                  <CardHeader>
-                    <CardTitle className="text-lg font-semibold text-gray-900">
-                      Unassigned Mentors
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {unassignedMentors.length > 0 ? (
-                      <ul className="list-disc pl-5 space-y-1 text-gray-700">
-                        {unassignedMentors.map((mentor) => (
-                          <li key={mentor.id}>{mentor.full_name}</li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="text-gray-500">All mentors have been assigned!</p>
-                    )}
-                  </CardContent>
-                </Card>
-
-                <Card className="shadow-sm md:col-span-2">
-                  <CardHeader>
-                    <CardTitle className="text-lg font-semibold text-gray-900">
-                      Mentors Not Chosen by Any Mentee
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {unchosenMentors.length > 0 ? (
-                      <ul className="list-disc pl-5 space-y-1 text-gray-700">
-                        {unchosenMentors.map((mentor) => (
-                          <li key={mentor.id}>{mentor.full_name}</li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="text-gray-500">
-                        All mentors were chosen by at least one mentee.
-                      </p>
-                    )}
-                  </CardContent>
-                </Card>
-                </div>
+              {/* Desktop: table */}
+              <div className="hidden md:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="px-5">Mentee name</TableHead>
+                      <TableHead>Top 3 choices</TableHead>
+                      <TableHead>Matched mentor</TableHead>
+                      <TableHead className="px-5">Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {displayData.map((mentee) => (
+                      <TableRow key={mentee.id}>
+                        <TableCell className="px-5 font-medium">
+                          <button
+                            type="button"
+                            onClick={() => handleMenteeClick(mentee)}
+                            className="rounded text-primary hover:underline"
+                          >
+                            {mentee.name}
+                          </button>
+                        </TableCell>
+                        <TableCell className="whitespace-normal">
+                          <div className="flex flex-wrap gap-1.5">
+                            {mentee.topChoices.map((choiceId) => (
+                              <Badge
+                                key={choiceId}
+                                variant="secondary"
+                                className="font-normal"
+                              >
+                                {mentorNameMap.get(choiceId) || "Unknown"}
+                              </Badge>
+                            ))}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {mentee.matchedMentorName ? (
+                            <span className="font-medium">
+                              {mentee.matchedMentorName}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="px-5">
+                          <Badge
+                            variant="secondary"
+                            className={cn(
+                              mentee.status === "Matched"
+                                ? "bg-brand-subtle text-brand-subtle-foreground"
+                                : "bg-muted text-muted-foreground",
+                            )}
+                          >
+                            {mentee.status}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
 
-      {/* Mentee Details Dialog */}
+      {/* Post-matching summary */}
+      {matchingRun ? (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <Card className="py-4 sm:py-5">
+            <CardHeader className="px-4 sm:px-5">
+              <CardTitle className="text-base font-semibold">
+                Unmatched mentees
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-4 sm:px-5">
+              <NameList
+                items={unmatchedMentees.map((m) => ({
+                  id: m.id,
+                  label: m.name,
+                  onClick: () => handleMenteeClick(m),
+                }))}
+                emptyLabel="All mentees have been matched."
+              />
+            </CardContent>
+          </Card>
+
+          <Card className="py-4 sm:py-5">
+            <CardHeader className="px-4 sm:px-5">
+              <CardTitle className="text-base font-semibold">
+                Unassigned mentors
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-4 sm:px-5">
+              <NameList
+                items={unassignedMentors.map((m) => ({
+                  id: m.id,
+                  label: m.full_name,
+                }))}
+                emptyLabel="All mentors have been assigned."
+              />
+            </CardContent>
+          </Card>
+
+          <Card className="py-4 md:col-span-2 sm:py-5">
+            <CardHeader className="px-4 sm:px-5">
+              <CardTitle className="text-base font-semibold">
+                Mentors not chosen by any mentee
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-4 sm:px-5">
+              <NameList
+                items={unchosenMentors.map((m) => ({
+                  id: m.id,
+                  label: m.full_name,
+                }))}
+                emptyLabel="All mentors were chosen by at least one mentee."
+              />
+            </CardContent>
+          </Card>
+        </div>
+      ) : null}
+
+      {/* Mentee details dialog */}
       <Dialog open={isDialogOpen} onOpenChange={closeDialog}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Mentee Details</DialogTitle>
+            <DialogTitle>Mentee details</DialogTitle>
             <DialogDescription>
-              Full information submitted by {selectedMentee?.first_name} {selectedMentee?.last_name}
+              Full information submitted by {selectedMentee?.first_name}{" "}
+              {selectedMentee?.last_name}
             </DialogDescription>
           </DialogHeader>
-          
-          {selectedMentee && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+
+          {selectedMentee ? (
+            <div className="space-y-5">
+              <dl className="grid grid-cols-1 gap-x-4 gap-y-3 text-sm sm:grid-cols-2">
                 <div>
-                  <label className="text-sm font-medium text-gray-700">First Name</label>
-                  <p className="text-sm text-gray-900 mt-1">{selectedMentee.first_name}</p>
+                  <dt className="text-muted-foreground">First name</dt>
+                  <dd className="mt-0.5 font-medium break-words">
+                    {selectedMentee.first_name}
+                  </dd>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-gray-700">Last Name</label>
-                  <p className="text-sm text-gray-900 mt-1">{selectedMentee.last_name}</p>
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium text-gray-700">Student ID</label>
-                  <p className="text-sm text-gray-900 mt-1">{selectedMentee.student_id}</p>
+                  <dt className="text-muted-foreground">Last name</dt>
+                  <dd className="mt-0.5 font-medium break-words">
+                    {selectedMentee.last_name}
+                  </dd>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-gray-700">Email</label>
-                  <p className="text-sm text-gray-900 mt-1">{selectedMentee.email}</p>
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium text-gray-700">Program</label>
-                  <p className="text-sm text-gray-900 mt-1">{selectedMentee.program}</p>
+                  <dt className="text-muted-foreground">Student ID</dt>
+                  <dd className="mt-0.5 font-medium">
+                    {selectedMentee.student_id}
+                  </dd>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-gray-700">Major</label>
-                  <p className="text-sm text-gray-900 mt-1">{selectedMentee.major}</p>
+                  <dt className="text-muted-foreground">Year</dt>
+                  <dd className="mt-0.5 font-medium">{selectedMentee.year}</dd>
                 </div>
-              </div>
-              
+                <div className="sm:col-span-2">
+                  <dt className="text-muted-foreground">Email</dt>
+                  <dd className="mt-0.5 font-medium break-all">
+                    {selectedMentee.email}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground">Program</dt>
+                  <dd className="mt-0.5 font-medium break-words">
+                    {selectedMentee.program}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground">Major</dt>
+                  <dd className="mt-0.5 font-medium break-words">
+                    {selectedMentee.major}
+                  </dd>
+                </div>
+              </dl>
+
               <div>
-                <label className="text-sm font-medium text-gray-700">Year</label>
-                <p className="text-sm text-gray-900 mt-1">{selectedMentee.year}</p>
+                <p className="text-sm font-medium">Mentor preferences</p>
+                <ol className="mt-2 space-y-2">
+                  {[
+                    selectedMentee.first_choice,
+                    selectedMentee.second_choice,
+                    selectedMentee.third_choice,
+                  ].map((choiceId, index) => (
+                    <li
+                      key={`${choiceId}-${index}`}
+                      className="flex items-center gap-3 rounded-lg border border-border p-2.5"
+                    >
+                      <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
+                        {index + 1}
+                      </span>
+                      <span className="text-sm break-words">
+                        {mentorNameMap.get(choiceId) || "Unknown"}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
               </div>
-              
-              <div>
-                <label className="text-sm font-medium text-gray-700">Mentor Preferences</label>
-                <div className="mt-2 space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-                      1st Choice
-                    </Badge>
-                    <span className="text-sm text-gray-900">
-                      {mentorNameMap.get(selectedMentee.first_choice) || "Unknown"}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                      2nd Choice
-                    </Badge>
-                    <span className="text-sm text-gray-900">
-                      {mentorNameMap.get(selectedMentee.second_choice) || "Unknown"}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
-                      3rd Choice
-                    </Badge>
-                    <span className="text-sm text-gray-900">
-                      {mentorNameMap.get(selectedMentee.third_choice) || "Unknown"}
-                    </span>
-                  </div>
-                </div>
-              </div>
-              
-              {selectedMentee.submitted_at && (
-                <div>
-                  <label className="text-sm font-medium text-gray-700">Submitted At</label>
-                  <p className="text-sm text-gray-900 mt-1">
-                    {new Date(selectedMentee.submitted_at).toLocaleString()}
-                  </p>
-                </div>
-              )}
+
+              {selectedMentee.submitted_at ? (
+                <p className="text-sm text-muted-foreground">
+                  Submitted{" "}
+                  {new Date(selectedMentee.submitted_at).toLocaleString()}
+                </p>
+              ) : null}
             </div>
-          )}
+          ) : null}
         </DialogContent>
       </Dialog>
     </div>
-    {/* <MenteeTable /> */}
-    </>
   );
 }
