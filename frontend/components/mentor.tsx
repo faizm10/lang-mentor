@@ -2,7 +2,11 @@
 
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { createClient } from "@supabase/supabase-js"
+import {
+  fetchMenteePreferences,
+  fetchMentorNamesByIds,
+  fetchMentorAssignments,
+} from "@/lib/db/actions"
 import { useEffect, useState } from "react"
 
 interface MenteeData {
@@ -21,95 +25,53 @@ export function MenteeTable() {
   useEffect(() => {
     async function fetchMenteeData() {
       try {
-        const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
-        const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-        const supabase = createClient(url, key)
+        const [menteesData, assignments] = await Promise.all([
+          fetchMenteePreferences(),
+          fetchMentorAssignments(),
+        ])
 
-        const { data: menteesData, error: menteesError } = await supabase
-          .from("mentee_preferences")
-          .select(`
-            id,
-            first_name,
-            last_name,
-            first_choice,
-            second_choice,
-            third_choice
-          `)
-          .order("submitted_at", { ascending: false })
-
-        if (menteesError) {
-          console.error("Error fetching mentees:", menteesError)
-          setError(`Failed to fetch mentee data: ${menteesError.message || 'Unknown error'}`)
-          return
-        }
-
-        if (!menteesData) {
-          setMentees([])
-          return
-        }
-
-        // Fetch mentor names for all choice IDs
         const choiceIds = new Set<string>()
-        menteesData?.forEach((mentee: { first_choice?: string; second_choice?: string; third_choice?: string }) => {
+        menteesData.forEach((mentee) => {
           if (mentee.first_choice) choiceIds.add(mentee.first_choice)
           if (mentee.second_choice) choiceIds.add(mentee.second_choice)
           if (mentee.third_choice) choiceIds.add(mentee.third_choice)
         })
+        assignments.forEach((a) => {
+          if (a.mentor_id) choiceIds.add(a.mentor_id)
+        })
 
-        console.log("Choice IDs to fetch:", Array.from(choiceIds).slice(0, 5)) // Show first 5
-
-        const { data: mentorsData, error: mentorsError } = await supabase
-          .from("mentor_profiles")
-          .select("id, full_name")
-          .in("id", Array.from(choiceIds))
-
-        console.log("Mentors fetched:", mentorsData?.length || 0)
-        console.log("Sample mentor data:", mentorsData?.slice(0, 3))
-
-        if (mentorsError) {
-          console.error("Error fetching mentors:", mentorsError)
-        }
-
-        const mentorMap = new Map(
-          mentorsData?.map((m: { id: string; full_name: string }) => [m.id, m.full_name]) || []
+        const mentorsData = await fetchMentorNamesByIds(Array.from(choiceIds))
+        const mentorMap = new Map(mentorsData.map((m) => [m.id, m.full_name]))
+        const assignmentMap = new Map(
+          assignments
+            .filter((a) => a.mentor_id)
+            .map((a) => [a.mentee_id, a.mentor_id as string]),
         )
 
-        console.log("Mentor map size:", mentorMap.size)
-        console.log("Sample mentor map entries:", Array.from(mentorMap.entries()).slice(0, 3))
+        const transformedData: MenteeData[] = menteesData.map((mentee) => {
+          const firstChoice = mentee.first_choice
+            ? mentorMap.get(mentee.first_choice) || "Unknown"
+            : "Unknown"
+          const secondChoice = mentee.second_choice
+            ? mentorMap.get(mentee.second_choice) || "Unknown"
+            : "Unknown"
+          const thirdChoice = mentee.third_choice
+            ? mentorMap.get(mentee.third_choice) || "Unknown"
+            : "Unknown"
 
-        const transformedData: MenteeData[] =
-          menteesData?.map((mentee: { id: string; first_name: string; last_name: string; first_choice?: string; second_choice?: string; third_choice?: string; mentor_assignments?: Array<{ mentor_profiles?: { full_name: string } }> }) => {
-            // Get top 3 mentor choices
-            const firstChoice = mentee.first_choice ? mentorMap.get(mentee.first_choice) || "Unknown" : "Unknown"
-            const secondChoice = mentee.second_choice ? mentorMap.get(mentee.second_choice) || "Unknown" : "Unknown"
-            const thirdChoice = mentee.third_choice ? mentorMap.get(mentee.third_choice) || "Unknown" : "Unknown"
-            
-            const preferences = [firstChoice, secondChoice, thirdChoice]
+          const matchedMentorId = assignmentMap.get(mentee.id)
+          const matchedMentor = matchedMentorId
+            ? mentorMap.get(matchedMentorId) || null
+            : null
 
-            // Debug first mentee
-            if (mentee.id === menteesData[0]?.id) {
-              console.log("First mentee debug:", {
-                menteeId: mentee.id,
-                firstChoiceId: mentee.first_choice,
-                firstChoiceName: firstChoice,
-                secondChoiceId: mentee.second_choice,
-                secondChoiceName: secondChoice,
-                thirdChoiceId: mentee.third_choice,
-                thirdChoiceName: thirdChoice
-              })
-            }
-
-            // Get matched mentor if any
-            const matchedMentor = mentee.mentor_assignments?.[0]?.mentor_profiles?.full_name || null
-
-            return {
-              id: mentee.id,
-              name: `${mentee.first_name} ${mentee.last_name}`,
-              topChoices: preferences,
-              matchedMentor,
-              status: matchedMentor ? "matched" : "unmatched",
-            }
-          }) || []
+          return {
+            id: mentee.id,
+            name: `${mentee.first_name} ${mentee.last_name}`,
+            topChoices: [firstChoice, secondChoice, thirdChoice],
+            matchedMentor,
+            status: matchedMentor ? "matched" : "unmatched",
+          }
+        })
 
         setMentees(transformedData)
       } catch (err) {

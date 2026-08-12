@@ -14,7 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { createClient } from "@supabase/supabase-js";
+import { createMentorProfile } from "@/lib/db/actions";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 
@@ -97,24 +97,16 @@ export default function AddMentorPage() {
     setIsSubmitting(true);
     
     try {
-      const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-      const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-      const supabase = createClient(url, key);
-
-      const { error } = await supabase
-        .from("mentor_profiles")
-        .insert([{
-          full_name: formData.full_name.trim(),
-          email: formData.email.trim(),
-          pronouns: formData.pronouns || null,
-          year_of_study: formData.year_of_study,
-          program_of_study: formData.program_of_study,
-          mentor_description: formData.mentor_description.trim(),
-          linkedin_url: formData.linkedin_url.trim() || null,
-          capacity: formData.capacity
-        }])
-        .select()
-        .single();
+      const { error } = await createMentorProfile({
+        full_name: formData.full_name.trim(),
+        email: formData.email.trim(),
+        pronouns: formData.pronouns || null,
+        year_of_study: formData.year_of_study,
+        program_of_study: formData.program_of_study,
+        mentor_description: formData.mentor_description.trim(),
+        linkedin_url: formData.linkedin_url.trim() || null,
+        capacity: formData.capacity,
+      });
 
       if (error) {
         console.error("Error creating mentor profile:", error);
