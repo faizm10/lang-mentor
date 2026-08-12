@@ -1,158 +1,143 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-@import 'tailwindcss';
+@import "tailwindcss";
 @import "tw-animate-css";
+
 @custom-variant dark (&:is(.dark *));
 
-@theme {
-  --color-background: #ffffff;
-  --color-foreground: #1f2937;
-  --color-card: #ffffff;
-  --color-card-foreground: #1f2937;
-  --color-popover: #ffffff;
-  --color-popover-foreground: #1f2937;
-  --color-primary: #374151;
-  --color-primary-foreground: #ffffff;
-  --color-secondary: #f9fafb;
-  --color-secondary-foreground: #374151;
-  --color-muted: #f3f4f6;
-  --color-muted-foreground: #6b7280;
-  --color-accent: #10b981;
-  --color-accent-foreground: #ffffff;
-  --color-destructive: #ef4444;
-  --color-destructive-foreground: #ffffff;
-  --color-border: #e5e7eb;
-  --color-input: #ffffff;
-  --color-ring: #374151;
-  --color-chart-1: #10b981;
-  --color-chart-2: #374151;
-  --color-chart-3: #9ca3af;
-  --color-chart-4: #d1d5db;
-  --color-chart-5: #e5e7eb;
-  --color-sidebar: #ffffff;
-  --color-sidebar-foreground: #6b7280;
-  --color-sidebar-primary: #374151;
-  --color-sidebar-primary-foreground: #ffffff;
-  --color-sidebar-accent: #f3f4f6;
-  --color-sidebar-accent-foreground: #374151;
-  --color-sidebar-border: #e5e7eb;
-  --color-sidebar-ring: #10b981;
-  --font-sans: "Inter", sans-serif;
-  --font-inter: "Inter", sans-serif;
-}
-
-/*
-  The default border color has changed to `currentColor` in Tailwind CSS v4,
-  so we've added these compatibility styles to make sure everything still
-  looks the same as it did with Tailwind CSS v3.
-
-  If we ever want to remove these styles, we need to add an explicit border
-  color utility to any element that depends on these defaults.
-*/
-@layer base {
-  *,
-  ::after,
-  ::before,
-  ::backdrop,
-  ::file-selector-button {
-    border-color: #e5e7eb;
-  }
-}
-
-@layer base {
-  :root {
-    --background: #ffffff;
-    --foreground: #1f2937;
-    --card: #ffffff;
-    --card-foreground: #1f2937;
-    --popover: #ffffff;
-    --popover-foreground: #1f2937;
-    --primary: #374151;
-    --primary-foreground: #ffffff;
-    --secondary: #f9fafb;
-    --secondary-foreground: #374151;
-    --muted: #f3f4f6;
-    --muted-foreground: #6b7280;
-    --accent: #10b981;
-    --accent-foreground: #ffffff;
-    --destructive: #ef4444;
-    --destructive-foreground: #ffffff;
-    --border: #e5e7eb;
-    --input: #ffffff;
-    --ring: #374151;
-    --chart-1: #10b981;
-    --chart-2: #374151;
-    --chart-3: #9ca3af;
-    --chart-4: #d1d5db;
-    --chart-5: #e5e7eb;
-    --radius: 0.5rem;
-    --sidebar-background: #ffffff;
-    --sidebar-foreground: #6b7280;
-    --sidebar-primary: #374151;
-    --sidebar-primary-foreground: #ffffff;
-    --sidebar-accent: #f3f4f6;
-    --sidebar-accent-foreground: #374151;
-    --sidebar-border: #e5e7eb;
-    --sidebar-ring: #10b981;
-  }
-}
-
-@layer base {
-  * {
-    @apply border-border;
-  }
-  body {
-    @apply bg-background text-foreground;
-    font-family: var(--font-sans);
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-  }
-  h1, h2, h3, h4, h5, h6 {
-    font-weight: 600;
-    color: var(--color-primary);
-  }
-  h1 {
-    letter-spacing: -0.025em;
-  }
-  h2, h3 {
-    letter-spacing: -0.01em;
-  }
-}
-
-/*
-  ---break---
-*/
+/* ---------------------------------------------------------------------------
+   Design tokens
+   One source of truth. `:root` holds the light theme, `.dark` overrides only
+   what changes, and `@theme inline` exposes them to Tailwind as utilities
+   (bg-background, text-muted-foreground, border-border, ...).
+--------------------------------------------------------------------------- */
 
 :root {
-  --sidebar: hsl(0 0% 98%);
-  --sidebar-foreground: hsl(240 5.3% 26.1%);
-  --sidebar-primary: hsl(240 5.9% 10%);
-  --sidebar-primary-foreground: hsl(0 0% 98%);
-  --sidebar-accent: hsl(240 4.8% 95.9%);
-  --sidebar-accent-foreground: hsl(240 5.9% 10%);
-  --sidebar-border: hsl(220 13% 91%);
-  --sidebar-ring: hsl(217.2 91.2% 59.8%);
-}
+  --radius: 0.75rem;
 
-/*
-  ---break---
-*/
+  /* Surfaces */
+  --background: oklch(0.995 0.002 247);
+  --foreground: oklch(0.21 0.02 253);
+  --card: oklch(1 0 0);
+  --card-foreground: var(--foreground);
+  --popover: oklch(1 0 0);
+  --popover-foreground: var(--foreground);
+
+  /* Brand — emerald */
+  --primary: oklch(0.62 0.14 163);
+  --primary-foreground: oklch(0.99 0.01 160);
+  --brand-subtle: oklch(0.96 0.03 163);
+  --brand-subtle-foreground: oklch(0.44 0.11 164);
+
+  /* Neutrals */
+  --secondary: oklch(0.968 0.004 247);
+  --secondary-foreground: oklch(0.28 0.02 253);
+  --muted: oklch(0.968 0.004 247);
+  --muted-foreground: oklch(0.53 0.02 253);
+  --accent: oklch(0.968 0.004 247);
+  --accent-foreground: oklch(0.28 0.02 253);
+
+  /* Feedback */
+  --destructive: oklch(0.58 0.22 27);
+  --destructive-foreground: oklch(0.99 0.01 20);
+  --success: oklch(0.62 0.14 163);
+  --success-foreground: oklch(0.99 0.01 160);
+  --warning: oklch(0.72 0.16 70);
+  --warning-foreground: oklch(0.27 0.06 70);
+
+  /* Lines & focus */
+  --border: oklch(0.923 0.005 247);
+  --input: oklch(0.895 0.006 247);
+  --ring: oklch(0.62 0.14 163);
+
+  /* Charts */
+  --chart-1: oklch(0.62 0.14 163);
+  --chart-2: oklch(0.6 0.12 240);
+  --chart-3: oklch(0.65 0.15 300);
+  --chart-4: oklch(0.72 0.16 70);
+  --chart-5: oklch(0.58 0.22 27);
+
+  /* Sidebar */
+  --sidebar: oklch(1 0 0);
+  --sidebar-foreground: oklch(0.35 0.02 253);
+  --sidebar-primary: oklch(0.62 0.14 163);
+  --sidebar-primary-foreground: oklch(0.99 0.01 160);
+  --sidebar-accent: oklch(0.96 0.03 163);
+  --sidebar-accent-foreground: oklch(0.4 0.11 164);
+  --sidebar-border: oklch(0.923 0.005 247);
+  --sidebar-ring: oklch(0.62 0.14 163);
+}
 
 .dark {
-  --sidebar: hsl(240 5.9% 10%);
-  --sidebar-foreground: hsl(240 4.8% 95.9%);
-  --sidebar-primary: hsl(224.3 76.3% 48%);
-  --sidebar-primary-foreground: hsl(0 0% 100%);
-  --sidebar-accent: hsl(240 3.7% 15.9%);
-  --sidebar-accent-foreground: hsl(240 4.8% 95.9%);
-  --sidebar-border: hsl(240 3.7% 15.9%);
-  --sidebar-ring: hsl(217.2 91.2% 59.8%);
+  --background: oklch(0.17 0.015 253);
+  --foreground: oklch(0.96 0.004 247);
+  --card: oklch(0.215 0.017 253);
+  --card-foreground: var(--foreground);
+  --popover: oklch(0.215 0.017 253);
+  --popover-foreground: var(--foreground);
+
+  --primary: oklch(0.7 0.15 163);
+  --primary-foreground: oklch(0.19 0.04 165);
+  --brand-subtle: oklch(0.3 0.05 164);
+  --brand-subtle-foreground: oklch(0.83 0.12 163);
+
+  --secondary: oklch(0.27 0.018 253);
+  --secondary-foreground: oklch(0.96 0.004 247);
+  --muted: oklch(0.27 0.018 253);
+  --muted-foreground: oklch(0.7 0.015 253);
+  --accent: oklch(0.3 0.02 253);
+  --accent-foreground: oklch(0.96 0.004 247);
+
+  --destructive: oklch(0.66 0.19 25);
+  --destructive-foreground: oklch(0.17 0.03 25);
+  --success: oklch(0.7 0.15 163);
+  --success-foreground: oklch(0.19 0.04 165);
+  --warning: oklch(0.78 0.15 70);
+  --warning-foreground: oklch(0.22 0.05 70);
+
+  --border: oklch(1 0 0 / 12%);
+  --input: oklch(1 0 0 / 18%);
+  --ring: oklch(0.7 0.15 163);
+
+  --sidebar: oklch(0.195 0.016 253);
+  --sidebar-foreground: oklch(0.9 0.006 247);
+  --sidebar-primary: oklch(0.7 0.15 163);
+  --sidebar-primary-foreground: oklch(0.19 0.04 165);
+  --sidebar-accent: oklch(0.3 0.05 164);
+  --sidebar-accent-foreground: oklch(0.85 0.12 163);
+  --sidebar-border: oklch(1 0 0 / 12%);
+  --sidebar-ring: oklch(0.7 0.15 163);
 }
 
-/*
-  ---break---
-*/
-
 @theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-brand-subtle: var(--brand-subtle);
+  --color-brand-subtle-foreground: var(--brand-subtle-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
@@ -161,17 +146,88 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
-}
 
-/*
-  ---break---
-*/
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", sans-serif;
+}
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+
   body {
     @apply bg-background text-foreground;
+    /* `@theme inline` does not emit --font-sans as a variable, so reference the
+       next/font variable directly here. */
+    font-family: var(--font-inter), ui-sans-serif, system-ui, -apple-system,
+      "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Readable headings: tighter tracking as size grows, balanced wrapping so
+     titles never leave a single orphan word on mobile. */
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply font-semibold text-balance;
+    line-height: 1.2;
+  }
+
+  h1 {
+    letter-spacing: -0.025em;
+  }
+
+  h2,
+  h3 {
+    letter-spacing: -0.015em;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  /* Every interactive element gets a visible, consistent focus ring. */
+  :focus-visible {
+    @apply outline-ring outline-2 outline-offset-2;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer components {
+  /* Page shell: consistent gutters on phones, capped measure on desktop. */
+  .page-container {
+    @apply mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10;
+  }
+
+  /* Body copy that stays comfortable to read at every width. */
+  .prose-readable {
+    @apply text-[0.9375rem] leading-relaxed text-muted-foreground sm:text-base;
   }
 }

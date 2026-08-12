@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import MentorSelection from "@/components/mentor-selection";
-import MenteeRegistration, { MenteeData } from "@/components/mentee-registration";
+import MenteeRegistration, {
+  MenteeData,
+} from "@/components/mentee-registration";
 import Navigation from "@/components/navigation";
 import { Toaster } from "sonner";
 
@@ -17,24 +19,20 @@ export default function Home() {
     setMenteeData(null);
   };
 
-
-
   return (
-    <>
-      <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
-        <Navigation />
-      </header>
-      <main className="flex-1 flex flex-col min-h-0">
+    <div className="flex min-h-dvh flex-col">
+      <Navigation currentStep={menteeData ? "select" : "register"} />
+      <main className="flex flex-1 flex-col">
         {menteeData ? (
-          <MentorSelection 
-            menteeData={menteeData} 
+          <MentorSelection
+            menteeData={menteeData}
             onReset={handleResetRegistration}
           />
         ) : (
           <MenteeRegistration onComplete={handleRegistrationComplete} />
         )}
       </main>
-      <Toaster />
-    </>
+      <Toaster position="top-center" richColors closeButton />
+    </div>
   );
 }

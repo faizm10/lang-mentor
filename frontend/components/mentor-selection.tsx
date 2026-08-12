@@ -3,10 +3,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
   DialogContent,
@@ -30,14 +35,14 @@ import {
   XCircle,
   Search,
   SlidersHorizontal,
+  Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import {
-  fetchMentorProfiles,
-  submitMenteePreferences,
-} from "@/lib/db/actions";
+import { fetchMentorProfiles, submitMenteePreferences } from "@/lib/db/actions";
 import { MenteeData } from "./mentee-registration";
+
+const MAX_SELECTIONS = 3;
 
 // Transformed mentor data for the UI
 interface MentorData {
@@ -57,8 +62,52 @@ interface MentorSelectionProps {
   onSubmissionComplete?: () => void;
 }
 
-export default function MentorSelection({ menteeData, onReset, onSubmissionComplete }: MentorSelectionProps) {
-  // State management for UI and selection (client state is appropriate here) [^1]
+/** Three dots showing how many of the required picks are filled. */
+function SlotIndicator({ filled }: { filled: number }) {
+  return (
+    <span className="flex items-center gap-1.5" aria-hidden="true">
+      {Array.from({ length: MAX_SELECTIONS }).map((_, i) => (
+        <span
+          key={i}
+          className={cn(
+            "size-2.5 rounded-full transition-colors",
+            i < filled ? "bg-primary" : "bg-border",
+          )}
+        />
+      ))}
+    </span>
+  );
+}
+
+function MentorCardSkeleton() {
+  return (
+    <Card className="h-full gap-4">
+      <CardHeader className="gap-0">
+        <div className="flex items-center gap-3">
+          <Skeleton className="size-12 shrink-0 rounded-full" />
+          <div className="min-w-0 flex-1 space-y-2">
+            <Skeleton className="h-4 w-2/3" />
+            <Skeleton className="h-3 w-1/2" />
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <Skeleton className="h-3 w-full" />
+        <Skeleton className="h-3 w-full" />
+        <Skeleton className="h-3 w-4/5" />
+      </CardContent>
+      <CardFooter>
+        <Skeleton className="h-10 w-full" />
+      </CardFooter>
+    </Card>
+  );
+}
+
+export default function MentorSelection({
+  menteeData,
+  onReset,
+  onSubmissionComplete,
+}: MentorSelectionProps) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -71,8 +120,11 @@ export default function MentorSelection({ menteeData, onReset, onSubmissionCompl
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [preferences, setPreferences] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [expandedBios, setExpandedBios] = useState<Set<string>>(new Set());
 
   useEffect(() => {
+    let cancelled = false;
+
     async function loadMentors() {
       try {
         setLoading(true);
@@ -102,57 +154,59 @@ export default function MentorSelection({ menteeData, onReset, onSubmissionCompl
             };
           }) ?? [];
 
-        setMentors(transformed);
+        if (!cancelled) setMentors(transformed);
       } catch (e) {
         console.error(e);
-        setError("Failed to load mentor profiles.");
+        if (!cancelled) setError("Failed to load mentor profiles.");
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }
 
     loadMentors();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const toggleSelection = (
-    id: string,
-    nextValue?: boolean | "indeterminate"
-  ) => {
+  const toggleSelection = (id: string) => {
     setSelectedIds((prev) => {
-      const isSelected = prev.includes(id);
-      const shouldSelect =
-        typeof nextValue === "boolean" ? nextValue : !isSelected;
-
-      if (shouldSelect) {
-        if (prev.length >= 3) {
-          toast("Please select exactly 3 students to continue");
-          return prev;
-        }
-        return [...prev, id];
-      } else {
+      if (prev.includes(id)) {
         return prev.filter((x) => x !== id);
       }
+      if (prev.length >= MAX_SELECTIONS) {
+        toast(`You can only choose ${MAX_SELECTIONS} mentors`, {
+          description: "Deselect one before picking another.",
+        });
+        return prev;
+      }
+      return [...prev, id];
+    });
+  };
+
+  const toggleBio = (id: string) => {
+    setExpandedBios((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
     });
   };
 
   const clearSelections = () => setSelectedIds([]);
 
   const handleSubmit = () => {
-    if (selectedIds.length === 3) {
-      setIsFormOpen(true);
-    } else {
-      toast("Please select exactly 3 students to continue");
+    if (selectedIds.length !== MAX_SELECTIONS) {
+      toast(`Please select exactly ${MAX_SELECTIONS} mentors to continue`);
+      return;
     }
-  };
-
-  // Keep preferences in sync with current selection when it reaches 3
- useEffect(() => {
-  if (selectedIds.length === 3) {
+    // Seed the ranking from the current selection each time the dialog opens.
     setPreferences(selectedIds);
-  } else if (preferences.length !== 0) {
-    setPreferences([]);
-  }
-}, [selectedIds, preferences]);
+    setIsFormOpen(true);
+  };
 
   const movePreferenceUp = (index: number) => {
     if (index <= 0) return;
@@ -164,8 +218,8 @@ export default function MentorSelection({ menteeData, onReset, onSubmissionCompl
   };
 
   const movePreferenceDown = (index: number) => {
-    if (index >= preferences.length - 1) return;
     setPreferences((prev) => {
+      if (index >= prev.length - 1) return prev;
       const next = [...prev];
       [next[index + 1], next[index]] = [next[index], next[index + 1]];
       return next;
@@ -173,7 +227,7 @@ export default function MentorSelection({ menteeData, onReset, onSubmissionCompl
   };
 
   const handleFinalSubmit = async () => {
-    if (preferences.length !== 3) {
+    if (preferences.length !== MAX_SELECTIONS) {
       toast("Please confirm your top 3 order.");
       return;
     }
@@ -194,14 +248,12 @@ export default function MentorSelection({ menteeData, onReset, onSubmissionCompl
       });
       if (error) {
         console.error(error);
-        toast("Submission failed. Please try again.");
+        toast.error("Submission failed. Please try again.");
         return;
       }
       setIsFormOpen(false);
       setIsSubmitted(true);
-      if (onSubmissionComplete) {
-        onSubmissionComplete();
-      }
+      onSubmissionComplete?.();
     } finally {
       setIsSaving(false);
     }
@@ -213,6 +265,10 @@ export default function MentorSelection({ menteeData, onReset, onSubmissionCompl
     setSortBy("name");
     setSortOrder("asc");
   };
+
+  const hasActiveFilters =
+    searchQuery.trim() !== "" ||
+    (selectedMajor !== "" && selectedMajor !== "all-majors");
 
   const uniqueMajors = useMemo(() => {
     const majors = new Set<string>();
@@ -273,45 +329,43 @@ export default function MentorSelection({ menteeData, onReset, onSubmissionCompl
 
   if (isSubmitted) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[70vh] p-4">
-        <Card className="max-w-md w-full p-8 text-center shadow-lg">
-          <CardContent className="flex flex-col items-center justify-center p-0">
-            <div className="w-16 h-16 bg-emerald-500 rounded-full flex items-center justify-center mx-auto mb-6">
-              <Check className="w-8 h-8 text-white" />
+      <div className="flex flex-1 items-center justify-center px-4 py-16">
+        <Card className="w-full max-w-md text-center">
+          <CardContent className="flex flex-col items-center">
+            <div className="mb-6 flex size-16 items-center justify-center rounded-full bg-primary">
+              <Check
+                className="size-8 text-primary-foreground"
+                aria-hidden="true"
+              />
             </div>
-            <h2 className="text-3xl font-bold text-gray-900 mb-3">
-              Selection Complete!
+            <h2 className="text-2xl font-bold sm:text-3xl">
+              Selection complete
             </h2>
-            <p className="text-gray-600 mb-4 leading-relaxed">
-              Your student selections have been submitted successfully.
+            <p className="prose-readable mt-3">
+              Your mentor selections have been submitted successfully.
+              We&apos;ll do our best to match you with one of your top choices.
             </p>
-            {/* <p className="text-sm text-gray-500">
-              You’ll receive a confirmation email within 24 hours to connect
-              with your peers.
-            </p> */}
           </CardContent>
         </Card>
       </div>
     );
   }
 
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[70vh] p-4">
-        <Loader2 className="h-10 w-10 animate-spin text-emerald-500" />
-        <p className="mt-4 text-lg text-gray-600">Loading mentors…</p>
-      </div>
-    );
-  }
-
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[70vh] p-4">
-        <XCircle className="h-12 w-12 text-red-500" />
-        <p className="mt-4 text-lg text-red-600">{error}</p>
-        <Button onClick={() => location.reload()} className="mt-4">
-          Try Again
-        </Button>
+      <div className="flex flex-1 items-center justify-center px-4 py-16">
+        <Card className="w-full max-w-md text-center">
+          <CardContent className="flex flex-col items-center">
+            <div className="mb-6 flex size-16 items-center justify-center rounded-full bg-destructive/10">
+              <XCircle className="size-8 text-destructive" aria-hidden="true" />
+            </div>
+            <h2 className="text-xl font-semibold">Something went wrong</h2>
+            <p className="prose-readable mt-2">{error}</p>
+            <Button onClick={() => location.reload()} className="mt-6">
+              Try again
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -321,377 +375,439 @@ export default function MentorSelection({ menteeData, onReset, onSubmissionCompl
     .filter(Boolean)
     .join(", ");
 
+  const isComplete = selectedIds.length === MAX_SELECTIONS;
+
   return (
-    <div className="flex flex-col">
-      <div className="flex-1 p-4 md:p-6 lg:p-8">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-10 md:mb-16">
-            <div className="flex justify-end mb-4">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={onReset}
-                className="text-gray-600 hover:text-gray-800"
-              >
-                Change Registration Info
-              </Button>
-            </div>
-            <h1 className="text-3xl md:text-4xl lg:text-5xl font-extrabold text-gray-900 mb-4 tracking-tight">
-              LSA Mentorship Program - Mentor Bank
+    <div className="flex flex-1 flex-col">
+      <div className="page-container flex-1 pb-32">
+        {/* Page heading */}
+        <div className="mb-8 sm:mb-10">
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground">
+              Registered as{" "}
+              <span className="font-medium text-foreground">
+                {menteeData.firstName} {menteeData.lastName}
+              </span>
+            </p>
+            <Button variant="outline" size="sm" onClick={onReset}>
+              Edit my details
+            </Button>
+          </div>
+
+          <div className="max-w-3xl">
+            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl">
+              LSA Mentorship Program — Mentor Bank
             </h1>
-            <p className="text-base md:text-lg text-gray-600 max-w-2xl mx-auto leading-relaxed">
-              Browse our Mentor Bank and select your top 3 choices. Read through the mentor bios and choose mentors who best
-              align with your passions, interests, goals, and personality. We’ll
-              do our best to match you with one of your top choices
+            <p className="prose-readable mt-3">
+              Read through the mentor bios and choose the{" "}
+              <span className="font-medium text-foreground">
+                {MAX_SELECTIONS} mentors
+              </span>{" "}
+              who best align with your passions, interests, goals, and
+              personality. You&apos;ll rank them in order on the next step.
             </p>
           </div>
+        </div>
 
-          {/* Filters */}
-          <Card className="mb-8 max-w-4xl mx-auto border-gray-200">
-            <CardContent className="p-4 md:p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <div className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-emerald-50 text-emerald-600">
-                  <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
-                </div>
-                <h2 className="text-base font-semibold text-gray-900">
-                  Search and filters
-                </h2>
+        {/* Filters */}
+        <Card className="mb-6 gap-4 py-4 sm:mb-8 sm:py-5">
+          <CardHeader className="gap-0 px-4 sm:px-5">
+            <div className="flex items-center gap-2">
+              <SlidersHorizontal
+                className="size-4 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <h2 className="text-sm font-semibold">Search and filter</h2>
+            </div>
+          </CardHeader>
+
+          <CardContent className="px-4 sm:px-5">
+            <div className="flex flex-col gap-3">
+              <div className="relative">
+                <Search
+                  className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+                  aria-hidden="true"
+                />
+                <Input
+                  placeholder="Search by name, program, or bio…"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9"
+                  aria-label="Search mentors"
+                  type="search"
+                />
               </div>
 
-              <div className="flex flex-col gap-4">
-                <div className="relative">
-                  <Search
-                    className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400"
-                    aria-hidden="true"
-                  />
-                  <Input
-                    placeholder="Search by name, bio, or hobbies..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-9"
-                    aria-label="Search mentors"
-                  />
-                </div>
-
-                <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
-                  <Select
-                    value={selectedMajor}
-                    onValueChange={setSelectedMajor}
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1fr_auto]">
+                <Select value={selectedMajor} onValueChange={setSelectedMajor}>
+                  <SelectTrigger
+                    className="w-full"
+                    aria-label="Filter by program"
                   >
-                    <SelectTrigger
-                      className="w-full sm:w-[220px]"
-                      aria-label="Filter by major"
-                    >
-                      <SelectValue placeholder="Filter by Major" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all-majors">All Majors</SelectItem>
-                      {uniqueMajors.map((major) => (
-                        <SelectItem key={major} value={major}>
-                          {major}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    <SelectValue placeholder="All programs" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all-majors">All programs</SelectItem>
+                    {uniqueMajors.map((major) => (
+                      <SelectItem key={major} value={major}>
+                        {major}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
 
-                  <Select value={sortBy} onValueChange={setSortBy}>
-                    <SelectTrigger
-                      className="w-full sm:w-[220px]"
-                      aria-label="Sort by"
-                    >
-                      <SelectValue placeholder="Sort by" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="name">Name</SelectItem>
-                      <SelectItem value="year">Year</SelectItem>
-                    </SelectContent>
-                  </Select>
+                <Select value={sortBy} onValueChange={setSortBy}>
+                  <SelectTrigger className="w-full" aria-label="Sort by">
+                    <SelectValue placeholder="Sort by" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="name">Sort by name</SelectItem>
+                    <SelectItem value="year">Sort by year</SelectItem>
+                  </SelectContent>
+                </Select>
 
-                  <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="shrink-0"
+                    onClick={() =>
+                      setSortOrder((o) => (o === "asc" ? "desc" : "asc"))
+                    }
+                    aria-label={`Sort order: ${
+                      sortOrder === "asc" ? "ascending" : "descending"
+                    }`}
+                  >
+                    {sortOrder === "asc" ? (
+                      <ArrowUp className="size-4" />
+                    ) : (
+                      <ArrowDown className="size-4" />
+                    )}
+                  </Button>
+
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleClearFilters}
+                    disabled={!hasActiveFilters}
+                    className="shrink-0"
+                  >
+                    Clear
+                  </Button>
+                </div>
+              </div>
+
+              <p className="text-sm text-muted-foreground" aria-live="polite">
+                Showing{" "}
+                <span className="font-medium text-foreground">
+                  {displayedStudents.length}
+                </span>{" "}
+                of{" "}
+                <span className="font-medium text-foreground">
+                  {mentors.length}
+                </span>{" "}
+                mentors
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Grid */}
+        {loading ? (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <MentorCardSkeleton key={i} />
+            ))}
+          </div>
+        ) : displayedStudents.length > 0 ? (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">
+            {displayedStudents.map((student) => {
+              const isSelected = selectedIds.includes(student.id);
+              const isDisabled = !isSelected && isComplete;
+              const isExpanded = expandedBios.has(student.id);
+              const isLongBio = student.bio.length > 220;
+
+              return (
+                <Card
+                  key={student.id}
+                  onClick={() => !isDisabled && toggleSelection(student.id)}
+                  className={cn(
+                    "h-full gap-4 py-5 transition-shadow",
+                    isSelected
+                      ? "border-primary ring-2 ring-primary/25"
+                      : "hover:shadow-md",
+                    isDisabled ? "opacity-55" : "cursor-pointer",
+                  )}
+                >
+                  <CardHeader className="gap-0 px-5">
+                    <div className="flex items-start gap-3">
+                      <div
+                        className={cn(
+                          "flex size-12 shrink-0 items-center justify-center rounded-full text-sm font-semibold",
+                          isSelected
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted text-muted-foreground",
+                        )}
+                        aria-hidden="true"
+                      >
+                        {isSelected ? (
+                          <Check className="size-5" />
+                        ) : (
+                          student.avatar
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h3
+                          id={`mentor-${student.id}-name`}
+                          className="text-base font-semibold break-words sm:text-lg"
+                        >
+                          {student.full_name}
+                        </h3>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          {student.year} · {student.major}
+                          {student.minor ? ` · Minor: ${student.minor}` : ""}
+                        </p>
+                      </div>
+                    </div>
+                  </CardHeader>
+
+                  <CardContent className="flex-1 px-5">
+                    {student.hobbies.length > 0 ? (
+                      <div className="mb-3 flex flex-wrap gap-1.5">
+                        {student.hobbies.map((hobby, idx) => (
+                          <Badge
+                            key={`${student.id}-${hobby}-${idx}`}
+                            variant="secondary"
+                            className="rounded-full font-normal"
+                          >
+                            {hobby}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : null}
+
+                    <p
+                      className={cn(
+                        "text-sm leading-relaxed text-muted-foreground",
+                        !isExpanded && "line-clamp-5",
+                      )}
+                    >
+                      {student.bio}
+                    </p>
+
+                    {isLongBio ? (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleBio(student.id);
+                        }}
+                        className="mt-2 rounded text-sm font-medium text-primary hover:underline"
+                        aria-expanded={isExpanded}
+                      >
+                        {isExpanded ? "Show less" : "Read full bio"}
+                      </button>
+                    ) : null}
+                  </CardContent>
+
+                  <CardFooter className="px-5">
                     <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() =>
-                        setSortOrder((o) => (o === "asc" ? "desc" : "asc"))
-                      }
-                      aria-label={`Sort order: ${
-                        sortOrder === "asc" ? "Ascending" : "Descending"
-                      }`}
+                      type="button"
+                      variant={isSelected ? "default" : "outline"}
+                      className="w-full"
+                      disabled={isDisabled}
+                      aria-pressed={isSelected}
+                      aria-labelledby={`mentor-${student.id}-name`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleSelection(student.id);
+                      }}
                     >
-                      {sortOrder === "asc" ? (
-                        <ArrowUp className="h-4 w-4" />
+                      {isSelected ? (
+                        <>
+                          <Check aria-hidden="true" />
+                          Selected
+                        </>
+                      ) : isDisabled ? (
+                        "3 already chosen"
                       ) : (
-                        <ArrowDown className="h-4 w-4" />
+                        "Select mentor"
                       )}
                     </Button>
-
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={handleClearFilters}
-                      aria-label="Clear all filters"
-                      className="text-gray-700 hover:text-red-600 hover:bg-red-50 bg-transparent"
-                    >
-                      <XCircle className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="text-sm text-gray-500">
-                  {"Showing "}
-                  <span className="font-medium text-gray-700">
-                    {displayedStudents.length}
-                  </span>
-                  {" of "}
-                  <span className="font-medium text-gray-700">
-                    {mentors.length}
-                  </span>
-                  {" students"}
-                </div>
+                  </CardFooter>
+                </Card>
+              );
+            })}
+          </div>
+        ) : (
+          <Card className="py-12">
+            <CardContent className="flex flex-col items-center text-center">
+              <div className="mb-4 flex size-12 items-center justify-center rounded-full bg-muted">
+                <Users
+                  className="size-6 text-muted-foreground"
+                  aria-hidden="true"
+                />
               </div>
+              <h3 className="text-base font-semibold">No mentors found</h3>
+              <p className="prose-readable mt-1 max-w-sm">
+                Try a different search term or clear your filters.
+              </p>
+              {hasActiveFilters ? (
+                <Button
+                  variant="outline"
+                  onClick={handleClearFilters}
+                  className="mt-5"
+                >
+                  Clear filters
+                </Button>
+              ) : null}
             </CardContent>
           </Card>
-
-          {/* Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8 mb-12">
-            {displayedStudents.length > 0 ? (
-              displayedStudents.map((student) => {
-                const isSelected = selectedIds.includes(student.id);
-                const isDisabled = !isSelected && selectedIds.length >= 3;
-
-                return (
-                  <Card
-                    key={student.id}
-                    role="button"
-                    tabIndex={0}
-                    aria-pressed={isSelected}
-                    className={cn(
-                      "relative transition-all duration-200 cursor-pointer h-full flex flex-col focus:outline-none",
-                      "hover:shadow-lg",
-                      isSelected
-                        ? "border-emerald-500 shadow-md ring-2 ring-emerald-200"
-                        : "border-gray-200",
-                      isDisabled && "opacity-60 cursor-not-allowed"
-                    )}
-                    onClick={() => !isDisabled && toggleSelection(student.id)}
-                    onKeyDown={(e) => {
-                      if ((e.key === "Enter" || e.key === " ") && !isDisabled) {
-                        e.preventDefault();
-                        toggleSelection(student.id);
-                      }
-                    }}
-                  >
-                    <CardHeader className="pb-3 flex flex-row items-start justify-between">
-                      <div className="flex items-center space-x-4">
-                        <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center text-lg font-semibold text-gray-700 shrink-0">
-                          {student.avatar}
-                        </div>
-                        <div>
-                          <h3 className="text-xl font-bold text-gray-900">
-                            {student.full_name}
-                          </h3>
-                          <p className="text-sm text-gray-500 mt-0.5">
-                            {student.year} – {student.major}
-                            {student.minor ? ` / Minor: ${student.minor}` : ""}
-                          </p>
-                        </div>
-                      </div>
-                      <Checkbox
-                        checked={isSelected}
-                        disabled={isDisabled}
-                        className="border-2 w-5 h-5"
-                        onCheckedChange={(v) => toggleSelection(student.id, v)}
-                        onClick={(e) => e.stopPropagation()}
-                        aria-label={isSelected ? "Deselect" : "Select"}
-                      />
-                    </CardHeader>
-
-                    <CardContent className="pt-2 pb-4 flex-1">
-                      {Array.isArray(student.hobbies) &&
-                        student.hobbies.length > 0 && (
-                          <div className="flex flex-wrap gap-2 mb-4">
-                            {student.hobbies.map((hobby, idx) => (
-                              <Badge
-                                key={`${student.id}-${hobby}-${idx}`}
-                                variant="secondary"
-                                className="text-xs px-2.5 py-1 bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-full"
-                              >
-                                {hobby}
-                              </Badge>
-                            ))}
-                          </div>
-                        )}
-                      <p className="text-sm text-gray-700 leading-relaxed">
-                        {student.bio}
-                      </p>
-                    </CardContent>
-
-                    {isSelected && (
-                      <div className="absolute top-3 right-3">
-                        <div className="w-7 h-7 bg-emerald-500 rounded-full flex items-center justify-center">
-                          <Check className="w-4 h-4 text-white" />
-                        </div>
-                      </div>
-                    )}
-                  </Card>
-                );
-              })
-            ) : (
-              <div className="col-span-full text-center text-gray-500 text-lg py-10">
-                No students found matching your criteria.
-              </div>
-            )}
-          </div>
-        </div>
+        )}
       </div>
 
-      {/* Sticky footer */}
-      {selectedIds.length > 0 && (
-        <div className="sticky bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200 shadow-lg">
-          <div className="p-4 md:p-6">
-            <Card className="max-w-2xl mx-auto shadow-none border-none bg-transparent">
-              <CardContent className="p-0">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                  <div>
-                    <h3 className="font-semibold text-gray-900 text-lg">
-                      {selectedIds.length} of 3 students selected
-                    </h3>
-                    <p className="text-sm text-gray-600 mt-1 line-clamp-1">
-                      {selectedNames}
-                    </p>
-                  </div>
-                  <div className="flex items-center space-x-3">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={clearSelections}
-                      className="text-gray-700 hover:text-red-600 hover:bg-red-50"
-                    >
-                      Clear all
-                    </Button>
-                    <Button
-                      onClick={handleSubmit}
-                      disabled={selectedIds.length !== 3}
-                      className="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-2 rounded-md"
-                    >
-                      {selectedIds.length === 3
-                        ? "Submit Selection"
-                        : "Continue"}
-                    </Button>
-                  </div>
+      {/* Sticky selection bar */}
+      {selectedIds.length > 0 ? (
+        <div className="sticky bottom-0 z-40 border-t border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85">
+          <div className="mx-auto w-full max-w-7xl px-4 py-3 sm:px-6 sm:py-4 lg:px-8">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2.5">
+                  <SlotIndicator filled={selectedIds.length} />
+                  <p className="text-sm font-semibold">
+                    {selectedIds.length} of {MAX_SELECTIONS} selected
+                  </p>
                 </div>
-              </CardContent>
-            </Card>
+                <p className="mt-1 truncate text-sm text-muted-foreground">
+                  {selectedNames}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 sm:shrink-0">
+                <Button
+                  variant="ghost"
+                  onClick={clearSelections}
+                  className="flex-1 sm:flex-none"
+                >
+                  Clear all
+                </Button>
+                <Button
+                  onClick={handleSubmit}
+                  disabled={!isComplete}
+                  className="flex-1 sm:flex-none sm:px-6"
+                >
+                  {isComplete
+                    ? "Review and submit"
+                    : `Pick ${MAX_SELECTIONS - selectedIds.length} more`}
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
-      )}
+      ) : null}
 
-      {/* Preferences + Info Form */}
+      {/* Ranking + confirmation dialog */}
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Confirm your selection</DialogTitle>
+            <DialogTitle>Rank your choices</DialogTitle>
             <DialogDescription>
-              Review your information and order your top 3 mentor preferences.
+              Put your favourite mentor first. We&apos;ll try to match you with
+              your highest-ranked available choice.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-sm font-medium">Full Name</Label>
-                <div className="p-2 bg-gray-50 rounded-md border text-sm">
-                  {menteeData.firstName} {menteeData.lastName}
-                </div>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-sm font-medium">Student ID</Label>
-                <div className="p-2 bg-gray-50 rounded-md border text-sm">
-                  {menteeData.studentId}
-                </div>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-sm font-medium">Email</Label>
-                <div className="p-2 bg-gray-50 rounded-md border text-sm">
-                  {menteeData.email}
-                </div>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-sm font-medium">Year</Label>
-                <div className="p-2 bg-gray-50 rounded-md border text-sm">
-                  {menteeData.year}
-                </div>
-              </div>
-              <div className="col-span-2 space-y-1">
-                <Label className="text-sm font-medium">Program & Major</Label>
-                <div className="p-2 bg-gray-50 rounded-md border text-sm">
-                  {menteeData.program} - {menteeData.major}
-                </div>
-              </div>
+          <div className="space-y-6">
+            <div className="space-y-2">
+              {preferences.map((id, index) => {
+                const mentorName =
+                  mentors.find((m) => m.id === id)?.full_name || "Unknown";
+                return (
+                  <div
+                    key={id}
+                    className="flex items-center justify-between gap-3 rounded-lg border border-border p-3"
+                  >
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
+                        {index + 1}
+                      </span>
+                      <span className="truncate text-sm font-medium">
+                        {mentorName}
+                      </span>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={() => movePreferenceUp(index)}
+                        disabled={index === 0}
+                        aria-label={`Move ${mentorName} up`}
+                      >
+                        <ArrowUp className="size-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={() => movePreferenceDown(index)}
+                        disabled={index === preferences.length - 1}
+                        aria-label={`Move ${mentorName} down`}
+                      >
+                        <ArrowDown className="size-4" />
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
-            <div className="space-y-2">
-              <Label>Top 3 order</Label>
-              <div className="space-y-2">
-                {preferences.map((id, index) => {
-                  const mentorName =
-                    mentors.find((m) => m.id === id)?.full_name || "Unknown";
-                  return (
-                    <div
-                      key={id}
-                      className="flex items-center justify-between rounded-md border p-2"
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className="text-sm font-medium w-6 text-gray-600">
-                          {index + 1}.
-                        </span>
-                        <span className="text-sm text-gray-900">
-                          {mentorName}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="icon"
-                          onClick={() => movePreferenceUp(index)}
-                          disabled={index === 0}
-                          aria-label="Move up"
-                        >
-                          <ArrowUp className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="icon"
-                          onClick={() => movePreferenceDown(index)}
-                          disabled={index === preferences.length - 1}
-                          aria-label="Move down"
-                        >
-                          <ArrowDown className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+            <div className="space-y-3 rounded-lg bg-muted/50 p-4">
+              <Label className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                Submitting as
+              </Label>
+              <dl className="grid grid-cols-1 gap-x-4 gap-y-2 text-sm sm:grid-cols-2">
+                <div className="flex justify-between gap-2 sm:block">
+                  <dt className="text-muted-foreground">Name</dt>
+                  <dd className="font-medium break-words">
+                    {menteeData.firstName} {menteeData.lastName}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-2 sm:block">
+                  <dt className="text-muted-foreground">Student ID</dt>
+                  <dd className="font-medium">{menteeData.studentId}</dd>
+                </div>
+                <div className="flex justify-between gap-2 sm:col-span-2 sm:block">
+                  <dt className="text-muted-foreground">Email</dt>
+                  <dd className="font-medium break-all">{menteeData.email}</dd>
+                </div>
+                <div className="flex justify-between gap-2 sm:col-span-2 sm:block">
+                  <dt className="text-muted-foreground">Program</dt>
+                  <dd className="font-medium break-words">
+                    {menteeData.program} · {menteeData.major} · {menteeData.year}
+                  </dd>
+                </div>
+              </dl>
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="gap-2 sm:gap-2">
             <Button
-              variant="ghost"
+              variant="outline"
               onClick={() => setIsFormOpen(false)}
               disabled={isSaving}
             >
-              Cancel
+              Back
             </Button>
-            <Button
-              onClick={handleFinalSubmit}
-              disabled={isSaving}
-              className="bg-emerald-500 hover:bg-emerald-600"
-            >
-              {isSaving ? "Submitting..." : "Submit"}
+            <Button onClick={handleFinalSubmit} disabled={isSaving}>
+              {isSaving ? (
+                <>
+                  <Loader2 className="animate-spin" aria-hidden="true" />
+                  Submitting…
+                </>
+              ) : (
+                "Submit my choices"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
